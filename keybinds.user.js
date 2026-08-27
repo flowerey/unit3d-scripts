@@ -1,10 +1,10 @@
 // ==UserScript==
 // @name         UNIT3D Keybinds
 // @namespace    https://github.com/flowerey/unit3d-scripts
-// @version      1.1
+// @version      1.2
 // @description  Adds keybinds to UNIT3D.
 // @author       blueberry
-// @match        https://*/torrents/*
+// @match        https://*/torrents*
 // @grant        none
 // @run-at       document-end
 // ==/UserScript==
@@ -81,13 +81,15 @@
                 padding: '30px',
                 borderRadius: '8px',
                 border: '1px solid #333',
-                maxWidth: '400px',
+                maxWidth: '500px',
                 width: '90%',
                 color: '#ddd',
                 fontFamily: 'system-ui, sans-serif'
             });
 
-            const binds = [
+            const isListPage = /\/torrents\/?$/.test(window.location.pathname);
+
+            const detailBinds = [
                 { key: 'S', desc: 'Open IMDb' },
                 { key: 'L', desc: 'Open Letterboxd' },
                 { key: 'M', desc: 'Open TMDB' },
@@ -95,15 +97,37 @@
                 { key: 'D', desc: 'Search NZBGeek' },
                 { key: 'T', desc: 'Search YouTube Trailer' },
                 { key: 'E', desc: 'Edit Torrent' },
-                { key: 'B', desc: 'Back to Torrents' },
-                { key: '?', desc: 'Show/Hide this help' },
-                { key: 'Esc', desc: 'Close this help' }
+                { key: 'B', desc: 'Back to Torrents' }
             ];
+
+            const listBinds = [
+                { key: 'J', desc: 'Select next torrent' },
+                { key: 'K', desc: 'Select previous torrent' },
+                { key: 'Enter', desc: 'Open selected torrent' },
+                { key: '/', desc: 'Focus search box' },
+                { key: 'Esc', desc: 'Clear selection / unfocus' }
+            ];
+
+            const sharedBinds = [
+                { key: '?', desc: 'Show/Hide this help' }
+            ];
+
+            let bindsHtml = '';
+            if (!isListPage) {
+                bindsHtml += `<div style="color:#2ecc71; font-weight:bold; margin-bottom:8px;">Torrent Detail</div>`;
+                bindsHtml += detailBinds.map(b => `<span style="color:#2ecc71; font-weight:bold;">${b.key}</span><span>${b.desc}</span>`).join('');
+            }
+            if (isListPage) {
+                bindsHtml += `<div style="color:#2ecc71; font-weight:bold; margin-bottom:8px;">Torrent List</div>`;
+                bindsHtml += listBinds.map(b => `<span style="color:#2ecc71; font-weight:bold;">${b.key}</span><span>${b.desc}</span>`).join('');
+            }
+            bindsHtml += `<div style="color:#2ecc71; font-weight:bold; margin-top:12px; margin-bottom:8px;">General</div>`;
+            bindsHtml += sharedBinds.map(b => `<span style="color:#2ecc71; font-weight:bold;">${b.key}</span><span>${b.desc}</span>`).join('');
 
             content.innerHTML = `
                 <h3 style="margin-top:0; color: #fff; border-bottom: 1px solid #333; padding-bottom: 10px;">Keybinds Help</h3>
                 <div style="display: grid; grid-template-columns: 50px 1fr; gap: 10px; margin-top: 20px;">
-                    ${binds.map(b => `<span style="color:#2ecc71; font-weight:bold;">${b.key}</span><span>${b.desc}</span>`).join('')}
+                    ${bindsHtml}
                 </div>
                 <div style="margin-top: 30px; text-align: center; font-size: 12px; color: #666;">Click anywhere to close</div>
             `;
@@ -117,12 +141,19 @@
         }
     };
 
+    const LIST_SELECTORS = [
+        'tr.torrent-search--list__no-poster-row',
+        'tr:has(.torrent-search--grouped__overview)',
+        'tr.torrent-search--list__row'
+    ].join(', ');
+
     class KeybindManager {
         constructor() {
             this.selectors = {
                 title: 'h1.meta__title',
                 metaLink: 'a.meta-id-tag'
             };
+            this.selectedIndex = -1;
             this.boundHandler = this.handleKeydown.bind(this);
             this.init();
         }
@@ -144,6 +175,32 @@
             return { name, year };
         }
 
+        getVisibleRows() {
+            return Array.from(document.querySelectorAll(LIST_SELECTORS)).filter(r => r.offsetParent !== null);
+        }
+
+        highlightRow(index) {
+            const rows = this.getVisibleRows();
+            rows.forEach((r, i) => {
+                r.style.outline = i === index ? '2px solid #2ecc71' : '';
+                r.style.outlineOffset = i === index ? '-2px' : '';
+            });
+            this.selectedIndex = index;
+
+            if (index >= 0 && rows[index]) {
+                rows[index].scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+            }
+        }
+
+        clearHighlight() {
+            const rows = this.getVisibleRows();
+            rows.forEach(r => {
+                r.style.outline = '';
+                r.style.outlineOffset = '';
+            });
+            this.selectedIndex = -1;
+        }
+
         init() {
             document.removeEventListener('keydown', this.boundHandler);
             document.addEventListener('keydown', this.boundHandler);
@@ -153,44 +210,88 @@
             const active = document.activeElement;
             if (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || active.isContentEditable) return;
 
-            const key = e.key.toLowerCase();
+            const key = e.key;
+            const keyLower = key.toLowerCase();
+            const isListPage = /\/torrents\/?$/.test(window.location.pathname);
 
-            if (key === 'escape') {
+            if (key === 'Escape') {
                 if (UI.helpOverlay) {
                     e.preventDefault();
                     UI.toggleHelp();
+                    return;
                 }
+                if (isListPage) {
+                    e.preventDefault();
+                    this.clearHighlight();
+                    return;
+                }
+            }
+
+            if (key === '?') {
+                e.preventDefault();
+                UI.toggleHelp();
                 return;
             }
 
-            const { name, year } = this.getMediaInfo();
-            const query = encodeURIComponent(`${name} ${year}`.trim());
+            if (isListPage) {
+                const rows = this.getVisibleRows();
+                if (rows.length === 0) return;
 
-            const links = {
-                imdb: this.getLink('.meta__imdb'),
-                letterboxd: this.getLink('.meta__letterboxd'),
-                tmdb: this.getLink('.meta__tmdb'),
-                bluray: this.getLink('.meta__blu-ray')
-            };
+                if (keyLower === 'j') {
+                    e.preventDefault();
+                    const next = Math.min(this.selectedIndex + 1, rows.length - 1);
+                    this.highlightRow(next);
+                    return;
+                }
+                if (keyLower === 'k') {
+                    e.preventDefault();
+                    const prev = Math.max(this.selectedIndex - 1, 0);
+                    this.highlightRow(prev);
+                    return;
+                }
+                if (key === 'Enter' && this.selectedIndex >= 0) {
+                    e.preventDefault();
+                    const link = rows[this.selectedIndex].querySelector('a[href*="/torrents/"]');
+                    if (link) window.location.href = link.href;
+                    return;
+                }
+                if (key === '/') {
+                    e.preventDefault();
+                    const searchInput = document.querySelector('input[type="search"], input[name="search"], input.form-control');
+                    if (searchInput) searchInput.focus();
+                    return;
+                }
+            }
 
-            const actions = {
-                's': () => links.imdb ? window.open(links.imdb, '_blank') : UI.showToast('IMDb link not found'),
-                'l': () => links.letterboxd ? window.open(links.letterboxd, '_blank') : UI.showToast('Letterboxd link not found'),
-                'm': () => links.tmdb ? window.open(links.tmdb, '_blank') : UI.showToast('TMDB link not found'),
-                'x': () => links.bluray ? window.open(links.bluray, '_blank') : UI.showToast('Blu-ray.com link not found'),
-                'd': () => window.open(`https://nzbgeek.info/geekseek.php?browseincludewords=${query}`, '_blank'),
-                't': () => window.open(`https://www.youtube.com/results?search_query=${query}+trailer`, '_blank'),
-                'e': () => {
-                    const path = window.location.pathname.replace(/\/$/, '');
-                    window.location.href = `${window.location.origin}${path}/edit`;
-                },
-                'b': () => window.location.href = `${window.location.origin}/torrents`,
-                '?': () => UI.toggleHelp()
-            };
+            if (!isListPage) {
+                const { name, year } = this.getMediaInfo();
+                const query = encodeURIComponent(`${name} ${year}`.trim());
 
-            if (actions[key]) {
-                e.preventDefault();
-                actions[key]();
+                const links = {
+                    imdb: this.getLink('.meta__imdb'),
+                    letterboxd: this.getLink('.meta__letterboxd'),
+                    tmdb: this.getLink('.meta__tmdb'),
+                    bluray: this.getLink('.meta__blu-ray')
+                };
+
+                const actions = {
+                    's': () => links.imdb ? window.open(links.imdb, '_blank') : UI.showToast('IMDb link not found'),
+                    'l': () => links.letterboxd ? window.open(links.letterboxd, '_blank') : UI.showToast('Letterboxd link not found'),
+                    'm': () => links.tmdb ? window.open(links.tmdb, '_blank') : UI.showToast('TMDB link not found'),
+                    'x': () => links.bluray ? window.open(links.bluray, '_blank') : UI.showToast('Blu-ray.com link not found'),
+                    'd': () => window.open(`https://nzbgeek.info/geekseek.php?browseincludewords=${query}`, '_blank'),
+                    't': () => window.open(`https://www.youtube.com/results?search_query=${query}+trailer`, '_blank'),
+                    'e': () => {
+                        const path = window.location.pathname.replace(/\/$/, '');
+                        window.location.href = `${window.location.origin}${path}/edit`;
+                    },
+                    'b': () => window.location.href = `${window.location.origin}/torrents`
+                };
+
+                if (actions[keyLower]) {
+                    e.preventDefault();
+                    actions[keyLower]();
+                }
             }
         }
     }

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         UNIT3D Table Sorter
 // @namespace    https://github.com/flowerey/unit3d-scripts
-// @version      1.1
+// @version      1.2
 // @description  Sort torrent tables by size, age, seeders, and more.
 // @author       blueberry
 // @match        https://*/torrents
@@ -12,6 +12,8 @@
 
 (function () {
     'use strict';
+
+    const SORT_STORAGE_KEY = 'unit3d-sort-prefs';
 
     const Utils = {
         parseSize(text) {
@@ -31,11 +33,12 @@
     };
 
     class TableSorter {
-        constructor(table) {
+        constructor(table, prefs) {
             this.table = table;
             this.tbody = table.querySelector('tbody');
             this.headers = Array.from(table.querySelectorAll('thead th'));
             this.currentSort = { index: -1, desc: true };
+            this.prefs = prefs;
             this.config = [
                 { name: 'Type', parser: el => el.textContent.trim(), type: 'string' },
                 { name: 'Name', parser: el => el.textContent.trim(), type: 'string' },
@@ -59,11 +62,18 @@
                     th.addEventListener('click', () => this.sort(i, spec));
                 }
             });
+
+            if (this.prefs && this.prefs.index >= 0 && this.prefs.index < this.headers.length) {
+                const spec = this.config.find(c => this.headers[this.prefs.index].textContent.trim().includes(c.name));
+                if (spec) {
+                    this.sort(this.prefs.index, spec, this.prefs.desc);
+                }
+            }
         }
 
-        sort(index, spec) {
+        sort(index, spec, forceDesc) {
             const rows = Array.from(this.tbody.querySelectorAll('tr'));
-            const isDesc = this.currentSort.index === index ? !this.currentSort.desc : true;
+            const isDesc = forceDesc !== undefined ? forceDesc : (this.currentSort.index === index ? !this.currentSort.desc : true);
 
             rows.sort((a, b) => {
                 const cellA = a.children[index];
@@ -80,6 +90,13 @@
             });
 
             this.updateUI(index, isDesc, rows);
+            this.savePrefs(index, isDesc);
+        }
+
+        savePrefs(index, desc) {
+            try {
+                localStorage.setItem(SORT_STORAGE_KEY, JSON.stringify({ index, desc }));
+            } catch (e) { /* ignore */ }
         }
 
         updateUI(index, isDesc, rows) {
@@ -100,12 +117,148 @@
         }
     }
 
+    class QuickFilter {
+        constructor() {
+            this.filterInput = null;
+            this.filterBtn = null;
+            this.active = false;
+        }
+
+        inject() {
+            const panel = document.querySelector('.panel__heading');
+            if (!panel || document.getElementById('quick-filter-container')) return;
+
+            const container = document.createElement('div');
+            container.id = 'quick-filter-container';
+            Object.assign(container.style, {
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                marginLeft: '12px',
+                verticalAlign: 'middle'
+            });
+
+            this.filterInput = document.createElement('input');
+            this.filterInput.type = 'text';
+            this.filterInput.placeholder = 'Filter torrents...';
+            this.filterInput.id = 'quick-filter-input';
+            Object.assign(this.filterInput.style, {
+                padding: '4px 10px',
+                border: '1px solid #444',
+                borderRadius: '4px',
+                backgroundColor: '#1a1a1a',
+                color: '#ddd',
+                fontSize: '11px',
+                width: '180px',
+                outline: 'none',
+                transition: 'border-color 0.2s'
+            });
+            this.filterInput.onfocus = () => this.filterInput.style.borderColor = '#2ecc71';
+            this.filterInput.onblur = () => this.filterInput.style.borderColor = '#444';
+
+            this.filterBtn = document.createElement('button');
+            this.filterBtn.innerHTML = '<i class="fas fa-filter"></i>';
+            this.filterBtn.title = 'Toggle filter';
+            Object.assign(this.filterBtn.style, {
+                padding: '4px 8px',
+                backgroundColor: '#444',
+                color: '#fff',
+                border: 'none',
+                borderRadius: '4px',
+                fontSize: '11px',
+                cursor: 'pointer',
+                transition: 'background 0.2s'
+            });
+            this.filterBtn.onmouseover = () => { if (!this.active) this.filterBtn.style.backgroundColor = '#555'; };
+            this.filterBtn.onmouseout = () => { if (!this.active) this.filterBtn.style.backgroundColor = '#444'; };
+
+            this.filterBtn.onclick = () => {
+                this.active = !this.active;
+                if (this.active) {
+                    this.filterBtn.style.backgroundColor = '#2ecc71';
+                    this.applyFilter();
+                } else {
+                    this.filterBtn.style.backgroundColor = '#444';
+                    this.clearFilter();
+                }
+            };
+
+            this.filterInput.addEventListener('input', () => {
+                if (this.active) this.applyFilter();
+            });
+
+            const clearBtn = document.createElement('button');
+            clearBtn.innerHTML = '<i class="fas fa-times"></i>';
+            clearBtn.title = 'Clear filter';
+            Object.assign(clearBtn.style, {
+                padding: '4px 8px',
+                backgroundColor: 'transparent',
+                color: '#888',
+                border: '1px solid #444',
+                borderRadius: '4px',
+                fontSize: '11px',
+                cursor: 'pointer',
+                transition: 'color 0.2s'
+            });
+            clearBtn.onmouseover = () => clearBtn.style.color = '#e74c3c';
+            clearBtn.onmouseout = () => clearBtn.style.color = '#888';
+            clearBtn.onclick = () => {
+                this.filterInput.value = '';
+                this.active = false;
+                this.filterBtn.style.backgroundColor = '#444';
+                this.clearFilter();
+            };
+
+            container.appendChild(this.filterInput);
+            container.appendChild(this.filterBtn);
+            container.appendChild(clearBtn);
+            panel.appendChild(container);
+
+            this.filterInput.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape') {
+                    this.filterInput.value = '';
+                    this.active = false;
+                    this.filterBtn.style.backgroundColor = '#444';
+                    this.clearFilter();
+                    this.filterInput.blur();
+                }
+            });
+        }
+
+        applyFilter() {
+            const query = this.filterInput.value.toLowerCase().trim();
+            const tables = document.querySelectorAll(SORTABLE_TABLES);
+            tables.forEach(table => {
+                const rows = table.querySelectorAll('tbody tr');
+                rows.forEach(row => {
+                    const text = row.textContent.toLowerCase();
+                    row.style.display = text.includes(query) ? '' : 'none';
+                });
+            });
+        }
+
+        clearFilter() {
+            const tables = document.querySelectorAll(SORTABLE_TABLES);
+            tables.forEach(table => {
+                const rows = table.querySelectorAll('tbody tr');
+                rows.forEach(row => { row.style.display = ''; });
+            });
+        }
+    }
+
     const SORTABLE_TABLES = [
         '.similar-torrents__torrents',
         '.table-torrents',
         '.torrents__torrents',
         'table.data-table'
     ].join(', ');
+
+    let savedPrefs = null;
+    try {
+        savedPrefs = JSON.parse(localStorage.getItem(SORT_STORAGE_KEY));
+    } catch (e) { /* ignore */ }
+
+    const filter = new QuickFilter();
 
     const setupUI = () => {
         const panel = document.querySelector('.panel__heading');
@@ -131,11 +284,12 @@
 
         btn.onclick = () => {
             const tables = document.querySelectorAll(SORTABLE_TABLES);
-            tables.forEach(t => new TableSorter(t));
+            tables.forEach(t => new TableSorter(t, savedPrefs));
             btn.remove();
         };
 
         panel.appendChild(btn);
+        filter.inject();
     };
 
     if (document.readyState === 'loading') {

@@ -6,6 +6,8 @@
 // @author       blueberry
 // @match        https://*/torrents
 // @match        https://*/torrents/*
+// @downloadURL  https://raw.githubusercontent.com/flowerey/unit3d-scripts/main/table-sorting.user.js
+// @updateURL    https://raw.githubusercontent.com/flowerey/unit3d-scripts/main/table-sorting.user.js.meta.js
 // @grant        none
 // @run-at       document-end
 // ==/UserScript==

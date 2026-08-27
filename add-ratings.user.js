@@ -7,6 +7,8 @@
 // @match        https://*/torrents/similar/*
 // @match        https://*/torrents/*
 // @match        https://*/requests/*
+// @downloadURL  https://raw.githubusercontent.com/flowerey/unit3d-scripts/main/add-ratings.user.js
+// @updateURL    https://raw.githubusercontent.com/flowerey/unit3d-scripts/main/add-ratings.user.js.meta.js
 // @grant        GM.xmlHttpRequest
 // @grant        GM_setValue
 // @grant        GM_getValue

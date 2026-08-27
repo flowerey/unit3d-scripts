@@ -6,6 +6,8 @@
 // @author       blueberry
 // @match        https://*/torrents*
 // @match        https://*/upload*
+// @downloadURL  https://raw.githubusercontent.com/flowerey/unit3d-scripts/main/unit3d-plus.user.js
+// @updateURL    https://raw.githubusercontent.com/flowerey/unit3d-scripts/main/unit3d-plus.user.js.meta.js
 // @grant        none
 // @run-at       document-end
 // ==/UserScript==

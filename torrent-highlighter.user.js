@@ -6,6 +6,8 @@
 // @author       blueberry
 // @match        https://*/torrents/*
 // @match        https://*/torrents/similar/*
+// @downloadURL  https://raw.githubusercontent.com/flowerey/unit3d-scripts/main/torrent-highlighter.user.js
+// @updateURL    https://raw.githubusercontent.com/flowerey/unit3d-scripts/main/torrent-highlighter.user.js.meta.js
 // @grant        none
 // @run-at       document-idle
 // ==/UserScript==

@@ -6,6 +6,8 @@
 // @author       blueberry
 // @match        https://*/chatbox*
 // @match        https://*/chat/*
+// @downloadURL  https://raw.githubusercontent.com/flowerey/unit3d-scripts/main/bot-hider.user.js
+// @updateURL    https://raw.githubusercontent.com/flowerey/unit3d-scripts/main/bot-hider.user.js.meta.js
 // @grant        none
 // @run-at       document-end
 // ==/UserScript==

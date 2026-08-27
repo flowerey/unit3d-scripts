@@ -5,6 +5,8 @@
 // @description  Adds encode analysis, compatibility checks, and quality indicators to mediainfo.
 // @author       blueberry
 // @match        https://*/torrents/*
+// @downloadURL  https://raw.githubusercontent.com/flowerey/unit3d-scripts/main/encode-type.user.js
+// @updateURL    https://raw.githubusercontent.com/flowerey/unit3d-scripts/main/encode-type.user.js.meta.js
 // @grant        none
 // @run-at       document-end
 // ==/UserScript==

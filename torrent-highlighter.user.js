@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         UNIT3D Torrent Highlighter
 // @namespace    https://github.com/flowerey/unit3d-scripts
-// @version      1.2
+// @version      1.3
 // @description  UNIT3D torrent row highlighting and visual enhancements.
 // @author       blueberry
 // @match        https://*/torrents/*
@@ -183,6 +183,7 @@
     class Highlighter {
         constructor() {
             this.throttleTimer = null;
+            this.observer = null;
             this.init();
         }
 
@@ -198,14 +199,16 @@
         }
 
         setupObserver() {
-            const observer = new MutationObserver(() => {
+            if (this.observer) this.observer.disconnect();
+
+            this.observer = new MutationObserver(() => {
                 if (this.throttleTimer) return;
                 this.throttleTimer = setTimeout(() => {
                     this.process();
                     this.throttleTimer = null;
                 }, settings.throttleMs);
             });
-            observer.observe(document.body, { childList: true, subtree: true });
+            this.observer.observe(document.body, { childList: true, subtree: true });
         }
 
         process() {
@@ -407,9 +410,20 @@
         }
     }
 
+    let currentInstance = null;
+
+    const start = () => {
+        if (currentInstance && currentInstance.observer) {
+            currentInstance.observer.disconnect();
+            currentInstance.observer = null;
+        }
+        currentInstance = new Highlighter();
+    };
+
     if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', () => new Highlighter());
+        document.addEventListener('DOMContentLoaded', start);
     } else {
-        new Highlighter();
+        start();
     }
+    window.addEventListener('turbolinks:load', start);
 })();

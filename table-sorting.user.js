@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         UNIT3D Table Sorter
 // @namespace    https://github.com/flowerey/unit3d-scripts
-// @version      1.2
+// @version      1.3
 // @description  Sort torrent tables by size, age, seeders, and more.
 // @author       blueberry
 // @match        https://*/torrents
@@ -38,6 +38,7 @@
             this.tbody = table.querySelector('tbody');
             this.headers = Array.from(table.querySelectorAll('thead th'));
             this.currentSort = { index: -1, desc: true };
+            this.secondarySort = { index: -1, desc: true };
             this.prefs = prefs;
             this.config = [
                 { name: 'Type', parser: el => el.textContent.trim(), type: 'string' },
@@ -58,39 +59,72 @@
                 if (spec) {
                     th.style.cursor = 'pointer';
                     th.style.userSelect = 'none';
-                    th.title = `Sort by ${spec.name}`;
-                    th.addEventListener('click', () => this.sort(i, spec));
+                    th.title = `Sort by ${spec.name} (Shift+Click for secondary)`;
+                    th.addEventListener('click', (e) => this.sort(i, spec, e.shiftKey));
                 }
             });
 
             if (this.prefs && this.prefs.index >= 0 && this.prefs.index < this.headers.length) {
                 const spec = this.config.find(c => this.headers[this.prefs.index].textContent.trim().includes(c.name));
                 if (spec) {
-                    this.sort(this.prefs.index, spec, this.prefs.desc);
+                    this.sort(this.prefs.index, spec, false, this.prefs.desc);
                 }
             }
         }
 
-        sort(index, spec, forceDesc) {
+        sort(index, spec, isSecondary, forceDesc) {
             const rows = Array.from(this.tbody.querySelectorAll('tr'));
+
+            if (isSecondary) {
+                const isDesc = forceDesc !== undefined ? forceDesc : (this.secondarySort.index === index ? !this.secondarySort.desc : true);
+                this.secondarySort = { index, desc: isDesc };
+                this.performSort(rows);
+                this.updateUI();
+                return;
+            }
+
             const isDesc = forceDesc !== undefined ? forceDesc : (this.currentSort.index === index ? !this.currentSort.desc : true);
+            this.currentSort = { index, desc: isDesc };
+            this.secondarySort = { index: -1, desc: true };
+            this.performSort(rows);
+            this.updateUI();
+            this.savePrefs(index, isDesc);
+        }
+
+        performSort(rows) {
+            const primary = this.currentSort;
+            const secondary = this.secondarySort;
 
             rows.sort((a, b) => {
-                const cellA = a.children[index];
-                const cellB = b.children[index];
-                if (!cellA || !cellB) return 0;
-
-                const valA = spec.parser(cellA);
-                const valB = spec.parser(cellB);
-
-                if (spec.type === 'string') {
-                    return isDesc ? valB.localeCompare(valA) : valA.localeCompare(valB);
+                let result = this.compareRows(a, b, primary);
+                if (result === 0 && secondary.index >= 0) {
+                    result = this.compareRows(a, b, secondary);
                 }
-                return isDesc ? valB - valA : valA - valB;
+                return result;
             });
 
-            this.updateUI(index, isDesc, rows);
-            this.savePrefs(index, isDesc);
+            rows.forEach(row => this.tbody.appendChild(row));
+        }
+
+        compareRows(a, b, sort) {
+            if (sort.index < 0) return 0;
+            const spec = this.config.find(c => this.headers[sort.index].textContent.trim().includes(c.name));
+            if (!spec) return 0;
+
+            const cellA = a.children[sort.index];
+            const cellB = b.children[sort.index];
+            if (!cellA || !cellB) return 0;
+
+            const valA = spec.parser(cellA);
+            const valB = spec.parser(cellB);
+
+            let result;
+            if (spec.type === 'string') {
+                result = valA.localeCompare(valB);
+            } else {
+                result = valA - valB;
+            }
+            return sort.desc ? -result : result;
         }
 
         savePrefs(index, desc) {
@@ -99,18 +133,23 @@
             } catch (e) { /* ignore */ }
         }
 
-        updateUI(index, isDesc, rows) {
-            this.currentSort = { index, desc: isDesc };
-            rows.forEach(row => this.tbody.appendChild(row));
-
+        updateUI() {
             this.headers.forEach((th, i) => {
                 const indicator = th.querySelector('.sort-indicator');
                 if (indicator) indicator.remove();
-                if (i === index) {
+
+                if (i === this.currentSort.index) {
                     const span = document.createElement('span');
                     span.className = 'sort-indicator';
-                    span.textContent = isDesc ? ' \u25BC' : ' \u25B2';
+                    span.textContent = this.currentSort.desc ? ' \u25BC' : ' \u25B2';
                     span.style.color = '#2ecc71';
+                    th.appendChild(span);
+                } else if (i === this.secondarySort.index) {
+                    const span = document.createElement('span');
+                    span.className = 'sort-indicator';
+                    span.textContent = this.secondarySort.desc ? ' \u25B2' : ' \u25BC';
+                    span.style.color = '#888';
+                    span.style.fontSize = '10px';
                     th.appendChild(span);
                 }
             });

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         UNIT3D BON Giveaway
 // @namespace    https://github.com/flowerey/unit3d-scripts
-// @version      6.4.0
+// @version      6.5.0
 // @description  Enables the functionality to become poor
 // @author       blueberry, Nums
 // @match        https://*/
@@ -686,6 +686,11 @@
       </div>
 
       <p class="form__group" style="text-align:center;">
+        <div style="display:flex; align-items:center; justify-content:center; gap:10px; margin-bottom:8px;">
+          <label style="font-size:11px; color:#aaa; white-space:nowrap;">Schedule start:</label>
+          <input class="form__text" id="scheduleTime" type="time" style="width:auto; padding:3px 6px; font-size:12px;" title="Optional: set a time to auto-start the giveaway">
+          <input class="form__text" id="scheduleDate" type="date" style="width:auto; padding:3px 6px; font-size:12px;" title="Optional: set a date to auto-start the giveaway">
+        </div>
   <button
     type="button"
     id="startButton"
@@ -694,6 +699,7 @@
   >
     Start
   </button>
+  <div id="scheduleStatus" style="font-size:11px; color:#ffc00a; margin-top:4px; display:none;"></div>
 </p>
     </form>
 
@@ -2422,6 +2428,29 @@ body.host-panel-dragging * {
 
     async function startGiveaway() {
         if (!confirmGiveawayAllowedOnSite()) return;
+
+        // Check for scheduled start time
+        const scheduleTime = document.getElementById('scheduleTime');
+        const scheduleDate = document.getElementById('scheduleDate');
+        const scheduleStatus = document.getElementById('scheduleStatus');
+        if (scheduleTime && scheduleDate && scheduleTime.value && scheduleDate.value) {
+            const scheduledDateTime = new Date(`${scheduleDate.value}T${scheduleTime.value}:00`);
+            const now = new Date();
+            if (scheduledDateTime > now) {
+                const delayMs = scheduledDateTime.getTime() - now.getTime();
+                const delayMin = Math.round(delayMs / 60000);
+                if (scheduleStatus) {
+                    scheduleStatus.style.display = 'block';
+                    scheduleStatus.textContent = `Scheduled to start in ~${delayMin} min (${scheduledDateTime.toLocaleTimeString()})`;
+                }
+                startButton.disabled = true;
+                setTimeout(() => {
+                    startGiveaway();
+                }, delayMs);
+                return;
+            }
+        }
+        if (scheduleStatus) scheduleStatus.style.display = 'none';
 
         clearWinnersStatusUI();
 
@@ -4412,37 +4441,60 @@ body.host-panel-dragging * {
                 reply("[color=red]A giveaway is already active. End it first with !end[/color]");
                 return;
             }
-            // Format: !host <amount> <start>-<end> <time>m [w]winners
-            // Example: !host 1000 1-100 5m 3w
+            // Format: !host <amount> <start>-<end> <time>m [Nw] [schedule HH:MM]
+            // Example: !host 1000 1-100 5m 3w schedule 20:00
             if (args.length < 3) {
-                reply("[color=red]Usage:[/color] !host <amount> <start>-<end> <time>m [Nw]\nExample: !host 1000 1-100 5m 3w");
+                reply("[color=red]Usage:[/color] !host <amount> <start>-<end> <time>m [Nw] [schedule HH:MM]\nExample: !host 1000 1-100 5m 3w");
                 return;
             }
             const amount = parseInt(args[0], 10);
             const rangeMatch = (args[1] || "").match(/^(-?\d+)\s*-\s*(-?\d+)$/);
             const timeMatch = (args[2] || "").match(/^(\d+)\s*m$/i);
             if (!amount || amount <= 0 || !rangeMatch || !timeMatch) {
-                reply("[color=red]Usage:[/color] !host <amount> <start>-<end> <time>m [Nw]\nExample: !host 1000 1-100 5m 3w");
+                reply("[color=red]Usage:[/color] !host <amount> <start>-<end> <time>m [Nw] [schedule HH:MM]\nExample: !host 1000 1-100 5m 3w");
                 return;
             }
             const startNum = parseInt(rangeMatch[1], 10);
             const endNum = parseInt(rangeMatch[2], 10);
             const minutes = parseInt(timeMatch[1], 10);
             let winners = 1;
+            let scheduleTime = null;
             if (args[3]) {
                 const wMatch = args[3].match(/^(\d+)\s*w$/i);
                 if (wMatch) winners = Math.max(1, Math.min(MAX_WINNERS, parseInt(wMatch[1], 10)));
+                const sMatch = args[3].match(/^schedule\s+(\d{1,2}:\d{2})$/i);
+                if (sMatch) scheduleTime = sMatch[1];
+            }
+            if (args[4]) {
+                const sMatch = args[4].match(/^schedule\s+(\d{1,2}:\d{2})$/i);
+                if (sMatch) scheduleTime = sMatch[1];
             }
             if (startNum >= endNum) { reply("[color=red]Start must be less than end.[/color]"); return; }
             if (minutes < 1) { reply("[color=red]Time must be at least 1 minute.[/color]"); return; }
             if (amount <= 0) { reply("[color=red]Amount must be positive.[/color]"); return; }
-            // Fill the form fields and trigger start
+
+            // Fill the form fields
             coinInput.value = amount;
             startInput.value = startNum;
             endInput.value = endNum;
             timerInput.value = minutes;
             winnersInput.value = winners;
             customMessageInput.value = "";
+
+            // Handle schedule
+            if (scheduleTime) {
+                const now = new Date();
+                const [h, m] = scheduleTime.split(':').map(Number);
+                const scheduled = new Date(now);
+                scheduled.setHours(h, m, 0, 0);
+                if (scheduled <= now) scheduled.setDate(scheduled.getDate() + 1);
+                const scheduleDateEl = document.getElementById('scheduleDate');
+                const scheduleTimeEl = document.getElementById('scheduleTime');
+                if (scheduleDateEl) scheduleDateEl.value = scheduled.toISOString().split('T')[0];
+                if (scheduleTimeEl) scheduleTimeEl.value = scheduleTime;
+                reply(`Giveaway scheduled for [color=#ffc00a]${scheduled.toLocaleString()}[/color]. Starting automatically...`);
+            }
+
             startGiveaway();
         },
 

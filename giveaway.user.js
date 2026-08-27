@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         UNIT3D BON Giveaway
 // @namespace    https://github.com/flowerey/unit3d-scripts
-// @version      6.5.0
+// @version      6.5.1
 // @description  Enables the functionality to become poor
 // @author       blueberry, Nums
 // @match        https://*/

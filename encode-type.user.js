@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         UNIT3D Encode Type
 // @namespace    https://github.com/flowerey/unit3d-scripts
-// @version      2.2
+// @version      2.2.1
 // @description  Adds encode analysis, compatibility checks, and quality indicators to mediainfo.
 // @author       blueberry
 // @match        https://*/torrents/*

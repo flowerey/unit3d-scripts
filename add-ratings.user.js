@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         UNIT3D Add Letterboxd/IMDB/RT/TMDB rating
 // @namespace    https://github.com/flowerey/unit3d-scripts
-// @version      1.5
+// @version      1.5.1
 // @description  Add Ratings to Letterboxd/IMDB/RT/TMDB.
 // @author       blueberry
 // @match        https://*/torrents/similar/*
@@ -28,10 +28,13 @@
 
     const ensureOmdbKey = () => {
         let key = GM_getValue("omdb_api_key", "");
+        if (GM_getValue("omdb_key_dismissed", false)) return key || CONFIG.defaultOmdbKey;
         if (!key) {
             key = prompt("Enter your OMDb API key (get one free at https://www.omdbapi.com/apikey.aspx):", "");
             if (key && key.trim()) {
                 GM_setValue("omdb_api_key", key.trim());
+            } else {
+                GM_setValue("omdb_key_dismissed", true);
             }
         }
         return key || CONFIG.defaultOmdbKey;

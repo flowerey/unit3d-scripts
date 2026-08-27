@@ -150,19 +150,19 @@
 
             let bindsHtml = '';
             if (!isListPage) {
-                bindsHtml += `<div style="color:#2ecc71; font-weight:bold; margin-bottom:8px;">Torrent Detail</div>`;
-                bindsHtml += detailBinds.map(b => `<span style="color:#2ecc71; font-weight:bold;">${fmt(b.key)}</span><span>${b.desc}</span>`).join('');
+                bindsHtml += `<div style="color:#2ecc71; font-weight:bold; margin-bottom:6px; font-size:13px;">Torrent Detail</div>`;
+                bindsHtml += detailBinds.map(b => `<div style="display:contents;"><span style="color:#2ecc71; font-weight:bold; text-align:center; min-width:60px;">[${fmt(b.key)}]</span><span style="color:#ccc;">${b.desc}</span></div>`).join('');
             }
             if (isListPage) {
-                bindsHtml += `<div style="color:#2ecc71; font-weight:bold; margin-bottom:8px;">Torrent List</div>`;
-                bindsHtml += listBinds.map(b => `<span style="color:#2ecc71; font-weight:bold;">${fmt(b.key)}</span><span>${b.desc}</span>`).join('');
+                bindsHtml += `<div style="color:#2ecc71; font-weight:bold; margin-bottom:6px; font-size:13px;">Torrent List</div>`;
+                bindsHtml += listBinds.map(b => `<div style="display:contents;"><span style="color:#2ecc71; font-weight:bold; text-align:center; min-width:60px;">[${fmt(b.key)}]</span><span style="color:#ccc;">${b.desc}</span></div>`).join('');
             }
-            bindsHtml += `<div style="color:#2ecc71; font-weight:bold; margin-top:12px; margin-bottom:8px;">General</div>`;
-            bindsHtml += sharedBinds.map(b => `<span style="color:#2ecc71; font-weight:bold;">${fmt(b.key)}</span><span>${b.desc}</span>`).join('');
+            bindsHtml += `<div style="color:#2ecc71; font-weight:bold; margin-top:10px; margin-bottom:6px; font-size:13px;">General</div>`;
+            bindsHtml += sharedBinds.map(b => `<div style="display:contents;"><span style="color:#2ecc71; font-weight:bold; text-align:center; min-width:60px;">[${fmt(b.key)}]</span><span style="color:#ccc;">${b.desc}</span></div>`).join('');
 
             content.innerHTML = `
-                <h3 style="margin-top:0; color: #fff; border-bottom: 1px solid #333; padding-bottom: 10px;">Keybinds Help</h3>
-                <div style="display: grid; grid-template-columns: 50px 1fr; gap: 10px; margin-top: 20px;">
+                <h3 style="margin-top:0; color: #fff; border-bottom: 1px solid #333; padding-bottom: 10px; font-size: 16px;">Keybinds Help</h3>
+                <div style="display: grid; grid-template-columns: auto 1fr; gap: 6px 12px; margin-top: 16px; align-items: center;">
                     ${bindsHtml}
                 </div>
                 <div style="margin-top: 20px; text-align: center;">

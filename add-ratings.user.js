@@ -173,7 +173,7 @@
         metaList.appendChild(li);
     };
 
-    const handleMetacritic = (imdbId) => {
+    const handleMetacritic = (imdbId, els) => {
         const cacheKey = `u3d_mc_${imdbId}`;
         const cached = Cache.get(cacheKey);
 
@@ -195,17 +195,35 @@
         `;
         metaList.appendChild(mcLink);
 
+        // Use OMDB to get Metacritic score (OMDB includes Metacritic in Ratings)
+        const cacheKeyOmdb = `u3d_omdb_${imdbId}`;
+        const cachedOmdb = Cache.get(cacheKeyOmdb);
+
+        if (cachedOmdb && cachedOmdb.mc) {
+            ratings.mc = cachedOmdb.mc;
+            Cache.set(cacheKey, cachedOmdb.mc);
+            const scoreSpan = document.createElement('span');
+            scoreSpan.className = 'rating-value';
+            scoreSpan.style.color = getColor(cachedOmdb.mc, 100);
+            scoreSpan.innerText = cachedOmdb.mc;
+            mcLink.querySelector('a').appendChild(scoreSpan);
+            renderAggregateScore();
+            return;
+        }
+
+        // If OMDB not cached, fetch it via OMDB (with Metacritic)
+        const apiKey = getOmdbKey();
         GM.xmlHttpRequest({
             method: "GET",
-            url: `https://www.metacritic.com/search/${imdbId}/`,
-            headers: {
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-            },
+            url: `http://www.omdbapi.com/?apikey=${apiKey}&tomatoes=true&i=${imdbId}`,
             onload: (res) => {
                 try {
-                    const match = res.responseText.match(/"scoreValue":\s*"?(\d+)"?/);
-                    if (match && match[1]) {
-                        const score = match[1];
+                    const json = JSON.parse(res.responseText);
+                    if (!json || json.Response === "False") return;
+
+                    const mcObj = json.Ratings ? json.Ratings.find(r => r.Source === "Metacritic") : null;
+                    if (mcObj && mcObj.Value) {
+                        const score = mcObj.Value.replace('/100', '').trim();
                         ratings.mc = score;
                         Cache.set(cacheKey, score);
 
@@ -426,7 +444,7 @@
         if (Elements.imdb || Elements.rt) handleOMDB(imdbId, Elements);
         if (Elements.lb) handleLetterboxd(imdbId, Elements.lb);
         if (Elements.br) handleBluray(imdbId, Elements.br);
-        handleMetacritic(imdbId);
+        handleMetacritic(imdbId, Elements);
     };
 
     init();

@@ -816,77 +816,124 @@
     // Quality Score (0-100)
     // ───────────────────────────────────────────────────────────
     function calculateQualityScore() {
-        let score = 50; // baseline
         const s = state.videoSettings;
+        const w = parseFloat(state.videoWidth) || 0;
+        const h = parseFloat(state.videoHeight) || 0;
+        const pixels = w * h;
+        let score = 0;
+        let maxScore = 0;
 
-        // Bits per pixel (up to +15)
-        if (state.bitsPerPixel !== null) {
+        // ── 1. Bitrate efficiency (0-30 pts) ──
+        // bits/pixel is the single best indicator of encode quality
+        maxScore += 30;
+        if (state.bitsPerPixel !== null && state.videoBitrate) {
             const bpp = state.bitsPerPixel;
-            if (bpp >= 0.04 && bpp <= 0.15) score += 15;
-            else if (bpp >= 0.025 && bpp < 0.04) score += 8;
-            else if (bpp > 0.15 && bpp <= 0.20) score += 10;
-            else if (bpp < 0.025) score -= 10;
+            // Target ranges by resolution (higher res needs lower bpp)
+            const targets = {
+                '4320p': 0.08, '2160p': 0.06, '1080p': 0.08,
+                '720p': 0.10, '480p': 0.12
+            };
+            const target = targets[state.videoResolution] || 0.08;
+            const ratio = bpp / target;
+
+            if (ratio >= 0.8 && ratio <= 1.5) score += 30;       // optimal
+            else if (ratio >= 0.6 && ratio < 0.8) score += 22;    // slightly low
+            else if (ratio > 1.5 && ratio <= 2.0) score += 24;    // high but ok
+            else if (ratio >= 0.4 && ratio < 0.6) score += 14;    // low
+            else if (ratio > 2.0 && ratio <= 3.0) score += 16;    // very high
+            else if (ratio < 0.4) score += 5;                      // too low
+            else score += 10;                                       // extreme
         }
 
-        // Encoder quality (+/- 10)
+        // ── 2. Encoder (0-20 pts) ──
+        // Modern encoders produce better quality at same bitrate
+        maxScore += 20;
         const lib = (state.writingLibrary || "").toLowerCase();
-        if (lib.includes("x264") || lib.includes("x265")) score += 10;
-        else if (lib.includes("svt")) score += 8;
-        else if (lib.includes("aom") || lib.includes("libaom")) score += 6;
-        else if (lib.includes("ffmpeg") || lib.includes("lavc")) score -= 5;
+        if (lib.includes("x265") || lib.includes("hevc")) score += 20;    // best for HD/4K
+        else if (lib.includes("x264")) score += 16;                       // solid, widely used
+        else if (lib.includes("svt")) score += 18;                        // AV1, excellent
+        else if (lib.includes("aom") || lib.includes("libaom")) score += 17; // AV1 reference
+        else if (lib.includes("rav1e")) score += 17;                      // AV1
+        else if (lib.includes("vpx") || lib.includes("libvpx")) score += 14; // VP9
+        else if (lib.includes("ffmpeg") || lib.includes("lavc")) score += 8;  // generic, may be transcoded
+        else if (lib) score += 10;                                           // unknown but present
 
-        // Preset quality (+/- 8)
+        // ── 3. Encoding preset (0-15 pts) ──
+        // Slower = better compression efficiency
+        maxScore += 15;
         if (s.preset) {
-            const slowPresets = ["veryslow", "slower", "slow"];
-            const fastPresets = ["ultrafast", "superfast", "veryfast", "faster", "fast"];
-            if (slowPresets.includes(s.preset)) score += 8;
-            else if (fastPresets.includes(s.preset)) score -= 8;
+            const presetScores = {
+                'veryslow': 15, 'slower': 14, 'slow': 12,
+                'medium': 9, 'fast': 6, 'faster': 4,
+                'veryfast': 3, 'superfast': 2, 'ultrafast': 1
+            };
+            score += presetScores[s.preset] || 8;
         }
 
-        // CRF/encode quality (+/- 5)
+        // ── 4. Rate control quality (0-15 pts) ──
+        // CRF is best, followed by 2-pass, then 1-pass
+        maxScore += 15;
         if (s.rc === "crf" && s.crf) {
-            const crf = parseInt(s.crf, 10);
-            if (crf <= 18) score += 5;
-            else if (crf <= 22) score += 3;
-            else if (crf > 28) score -= 5;
+            const crf = parseFloat(s.crf);
+            // CRF 18-22 is visually transparent for most content
+            if (crf >= 18 && crf <= 22) score += 15;
+            else if (crf >= 16 && crf < 18) score += 13;   // very high quality
+            else if (crf > 22 && crf <= 26) score += 12;   // good quality
+            else if (crf >= 14 && crf < 16) score += 11;   // near lossless
+            else if (crf > 26 && crf <= 30) score += 9;    // acceptable
+            else if (crf < 14) score += 8;                  // overkill
+            else score += 6;                                 // low quality
+        } else if (s.rc === "2pass" || s["stats-read"] > 0) {
+            score += 12;  // multi-pass is good
+        } else if (s.bitrate) {
+            score += 8;   // single-pass with bitrate target
         }
 
-        // b-adapt (+/- 3)
-        if (s["b-adapt"] == 2) score += 3;
-        else if (s["b-adapt"] == 0) score -= 3;
+        // ── 5. B-frame optimization (0-10 pts) ──
+        maxScore += 10;
+        if (s["b-adapt"] == 2) score += 6;       // optimal b-adapt
+        else if (s["b-adapt"] == 1) score += 4;  // fast b-adapt
+        else if (s["b-adapt"] == 0) score += 1;  // no b-adapt
+        if (s.bframes) {
+            const bf = parseInt(s.bframes, 10);
+            if (bf >= 3 && bf <= 8) score += 4;   // optimal range
+            else if (bf >= 1 && bf < 3) score += 2;
+            else if (bf > 8) score += 3;           // high but not bad
+        }
 
-        // Lossless penalty
-        if (s.crf == 0 || s.qp == 0) score -= 5;
-
-        // Scan type (+/- 3)
-        if (state.scanType && state.scanType.toLowerCase().includes("progressive")) score += 3;
-        else if (state.scanType && !state.scanType.toLowerCase().includes("progressive")) score -= 3;
-
-        // Frame rate mode (+/- 2)
-        if (state.frameRateMode && state.frameRateMode.toLowerCase().includes("constant")) score += 2;
-        else if (state.frameRateMode && state.frameRateMode.toLowerCase().includes("variable")) score -= 2;
-
-        // HDR bonus (+3)
+        // ── 6. Source quality indicators (0-10 pts) ──
+        maxScore += 10;
+        if (state.scanType) {
+            if (state.scanType.toLowerCase().includes("progressive")) score += 4;
+            else score -= 2; // interlaced is bad
+        }
+        if (state.frameRateMode) {
+            if (state.frameRateMode.toLowerCase().includes("constant")) score += 3;
+            else if (state.frameRateMode.toLowerCase().includes("variable")) score += 1;
+        }
         if (state.videoHdrFormat && state.videoHdrFormat !== "SDR") score += 3;
 
-        // DXVA/stream optimized bonus (+3)
-        if (is_dxva()) score += 3;
-        if (is_stream_op()) score += 3;
-
-        return Math.max(0, Math.min(100, score));
+        const finalScore = Math.max(0, Math.min(100, Math.round(score)));
+        return finalScore;
     }
 
     function getScoreColor(score) {
-        if (score >= 80) return '#66ff66';
-        if (score >= 60) return '#ffcc00';
-        if (score >= 40) return '#ff9900';
-        return '#ff4d4d';
+        if (score >= 90) return '#40E0D0';  // reference quality
+        if (score >= 80) return '#66ff66';  // excellent
+        if (score >= 70) return '#88cc44';  // very good
+        if (score >= 60) return '#ffcc00';  // good
+        if (score >= 50) return '#ff9900';  // average
+        if (score >= 40) return '#ff6600';  // below average
+        return '#ff4d4d';                    // poor
     }
 
     function getScoreLabel(score) {
+        if (score >= 90) return 'Reference';
         if (score >= 80) return 'Excellent';
+        if (score >= 70) return 'Very Good';
         if (score >= 60) return 'Good';
-        if (score >= 40) return 'Fair';
+        if (score >= 50) return 'Average';
+        if (score >= 40) return 'Below Avg';
         return 'Poor';
     }
 
@@ -930,6 +977,12 @@
 
         const score = calculateQualityScore();
         lines.push(`Quality Score: ${score}/100 (${getScoreLabel(score)})`);
+        lines.push(`  - Bitrate efficiency: based on bits/pixel vs resolution target`);
+        lines.push(`  - Encoder: x265/x264/AV1/etc quality characteristics`);
+        lines.push(`  - Preset: slower = better compression`);
+        lines.push(`  - Rate control: CRF > multipass > single-pass`);
+        lines.push(`  - B-frames: b-adapt and bframe count`);
+        lines.push(`  - Source: progressive scan, CFR, HDR`);
         lines.push('');
 
         const categories = {};

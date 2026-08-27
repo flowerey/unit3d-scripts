@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         UNIT3D Add Letterboxd/IMDB/RT/TMDB rating
-// @version      1.2
+// @version      1.3
 // @description  Add Ratings to Letterboxd/IMDB/RT/TMDB.
 // @license      MIT
 // @match        https://*/torrents/similar/*
@@ -18,19 +18,29 @@
 (function () {
     "use strict";
 
-    // --- KONFIGURACJA ---
     const CONFIG = {
         cacheHours: 120,
-        omdbKey: "6be019fc",
+        defaultOmdbKey: "6be019fc",
         debug: false
     };
 
-    // --- LOGOWANIE ---
+    const getOmdbKey = () => GM_getValue("omdb_api_key", "") || CONFIG.defaultOmdbKey;
+
+    const ensureOmdbKey = () => {
+        let key = GM_getValue("omdb_api_key", "");
+        if (!key) {
+            key = prompt("Enter your OMDb API key (get one free at https://www.omdbapi.com/apikey.aspx):", "");
+            if (key && key.trim()) {
+                GM_setValue("omdb_api_key", key.trim());
+            }
+        }
+        return key || CONFIG.defaultOmdbKey;
+    };
+
     const log = (msg, data) => {
         if (CONFIG.debug) console.log(`%c[U3D Rating] ${msg}`, "color: cyan; font-weight: bold;", data || "");
     };
 
-    // --- CACHE ---
     const Cache = {
         get: (key) => {
             const data = localStorage.getItem(key);
@@ -49,7 +59,6 @@
         }
     };
 
-    // --- STYLE CSS ---
     const injectStyles = () => {
         const style = document.createElement("style");
         style.textContent = `
@@ -61,7 +70,6 @@
         document.head.appendChild(style);
     };
 
-    // --- UI HELPERS ---
     const getColor = (rating, scale = 10) => {
         let n = parseFloat(rating);
         if (scale === 100) n /= 10;
@@ -85,29 +93,19 @@
         link.appendChild(span);
     };
 
-    // --- 1. FILMWEB ---
     const handleFilmweb = (metaList) => {
         if (document.querySelector('.meta__filmweb')) return;
 
         const titleEl = document.querySelector('.meta__title') || document.querySelector('h1.panel__heading');
         if (!titleEl) return;
 
-        // Pobierz surowy tekst
-        let rawTitle = titleEl.textContent;
-
-        // CZYSZCZENIE TYTUŁU (Kluczowe zmiany):
-        // 1. .replace(/[\n\r]+/g, ' ') -> Zamienia entery na spacje (to naprawia problem %0A)
-        // 2. .replace(/\s{2,}/g, ' ') -> Zamienia wielokrotne spacje na pojedynczą
-        // 3. .replace(/\[.*?\]/g, '') -> Usuwa [Freeleech], [2023] itp.
-        // 4. .replace(/\./g, ' ') -> Zamienia kropki w tytułach scenowych na spacje
-        const cleanTitle = rawTitle
+        const cleanTitle = titleEl.textContent
             .replace(/[\n\r]+/g, ' ')
             .replace(/\s{2,}/g, ' ')
             .replace(/\[.*?\]/g, '')
             .replace(/\./g, ' ')
             .trim();
 
- 
         const fwLink = `https://duckduckgo.com/?q=\\${encodeURIComponent(cleanTitle)}%20site%3Afilmweb.pl`;
 
         const li = document.createElement('li');
@@ -120,7 +118,6 @@
         metaList.appendChild(li);
     };
 
-    // --- 2. OMDB (IMDb + RT) ---
     const handleOMDB = (imdbId, els) => {
         const cacheKey = `u3d_omdb_${imdbId}`;
         const cached = Cache.get(cacheKey);
@@ -135,9 +132,11 @@
             return;
         }
 
+        const apiKey = ensureOmdbKey();
+
         GM.xmlHttpRequest({
             method: "GET",
-            url: `http://www.omdbapi.com/?apikey=${CONFIG.omdbKey}&tomatoes=true&i=${imdbId}`,
+            url: `http://www.omdbapi.com/?apikey=${apiKey}&tomatoes=true&i=${imdbId}`,
             onload: (res) => {
                 try {
                     const json = JSON.parse(res.responseText);
@@ -161,12 +160,15 @@
                     }
 
                     if (Object.keys(dataToCache).length > 0) Cache.set(cacheKey, dataToCache);
-                } catch (e) {}
-            }
+                } catch (e) {
+                    log("OMDB parse error", e);
+                }
+            },
+            onerror: (e) => log("OMDB request error", e),
+            ontimeout: () => log("OMDB request timed out")
         });
     };
 
-    // --- 3. LETTERBOXD ---
     const handleLetterboxd = (imdbId, container) => {
         const cacheKey = `u3d_lb_${imdbId}`;
         const cached = Cache.get(cacheKey);
@@ -187,11 +189,11 @@
                     renderRating(container, rating, 5);
                     Cache.set(cacheKey, rating);
                 }
-            }
+            },
+            onerror: (e) => log("Letterboxd request error", e)
         });
     };
 
-    // --- 4. BLU-RAY ---
     const handleBluray = (imdbId, container) => {
         const cacheKey = `u3d_br_${imdbId}`;
         const cached = Cache.get(cacheKey);
@@ -234,9 +236,9 @@
                     if (starEl) {
                         rating = starEl.innerText.trim();
                     } else {
-                         const textNodes = firstResult.innerText;
-                         const match = textNodes.match(/(\d\.\d)/);
-                         if(match) rating = match[1];
+                        const textNodes = firstResult.innerText;
+                        const match = textNodes.match(/(\d\.\d)/);
+                        if(match) rating = match[1];
                     }
                 } else if (!targetUrl.includes("/search/")) {
                     const ratingContainer = doc.querySelector('#rating_score') || doc.querySelector('[itemprop="ratingValue"]');
@@ -250,11 +252,11 @@
 
                 Cache.set(cacheKey, { url: targetUrl, rating: rating });
                 updateUI(targetUrl, rating);
-            }
+            },
+            onerror: (e) => log("Blu-ray request error", e)
         });
     };
 
-    // --- INICJALIZACJA ---
     const init = () => {
         injectStyles();
 

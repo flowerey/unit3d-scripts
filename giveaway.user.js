@@ -2,7 +2,7 @@
 // @name         Blutopia BON Giveaway
 // @namespace    https://openuserjs.org/users/Nums
 // @description  Enables the functionality to become poor
-// @version      6.2.2
+// @version      6.3.0
 // @updateURL    https://openuserjs.org/meta/Nums/Blutopia_BON_Giveaway.meta.js
 // @downloadURL  https://openuserjs.org/install/Nums/Blutopia_BON_Giveaway.user.js
 // @connect      openuserjs.org
@@ -67,8 +67,7 @@
     const MAX_REMINDERS = 6; //maximum number of reminders allowed
 
     // Persistent stats (saved in localStorage on this site)
-    const STATS_KEY_GM = `BON_GIVEAWAY_STATS::${location.hostname}`;
-    const STATS_KEY_LS = `BON_GIVEAWAY_STATS::${location.hostname}`;
+    const STATS_KEY = `BON_GIVEAWAY_STATS::${location.hostname}`;
     const STATS_VERSION = 1;
     const STATS_DEFAULT_TOP_N = 3;
     const STATS_MAX_TOP_N = 10;
@@ -415,6 +414,10 @@
     const entryRowByKey = new Map();
 
     const regNum = /^-?\d+$/; // matches integers (including negative) for entry detection
+
+    // Cross-page message deduplication: tracks API message IDs already processed
+    // to prevent double-processing when both the DOM observer and API poller are active.
+    const processedApiMessageIds = new Set();
 
     /* --- Naughty (exclusion) list ------------------------------------- */
     const NAUGHTY_KEY = "giveaway-naughty-list";
@@ -2242,7 +2245,7 @@ body.host-panel-dragging * {
             const tracker = new SponsorTracker({ chatroomId, giveawayStartTime, giveawayData });
             window.__activeTracker = tracker;
             tracker.poll().catch(console.error);
-            sponsorsInterval = setInterval(() => tracker.poll(), 10_000);
+            sponsorsInterval = setInterval(() => tracker.poll(), 5_000);
 
             // 10) Re-start countdown timer
             giveawayData.countdownTimerID = countdownTimer(countdownHeader, giveawayData);
@@ -2592,7 +2595,7 @@ body.host-panel-dragging * {
             let tracker = new SponsorTracker({ chatroomId, giveawayStartTime, giveawayData });
             window.__activeTracker = tracker;
             tracker.poll().catch(console.error);
-            sponsorsInterval = setInterval(() => tracker.poll(), 10_000);
+            sponsorsInterval = setInterval(() => tracker.poll(), 5_000);
 
             if (observer) {
                 startObserver();
@@ -2921,6 +2924,34 @@ body.host-panel-dragging * {
             handleGiveawayCommands(author, messageContent, fancyName, giveawayData);
         }
         if (PERF) perfMeasure('message_parse', perfStart);
+    }
+
+    /**
+     * Process a chat message received from the API (cross-page support).
+     * This allows entries and commands to work even when the chatbox DOM is not visible.
+     * @param {Object} apiMsg - The API message object with { id, message, user: { username }, created_at }
+     */
+    function processApiMessage(apiMsg) {
+        if (!apiMsg || !giveawayData) return;
+
+        const msgText = (apiMsg.message || "").trim();
+        if (!msgText) return;
+
+        const isEntry = regNum.test(msgText);
+        const isCommand = msgText.startsWith("!");
+        if (!isEntry && !isCommand) return;
+
+        const author = apiMsg.user?.username || "";
+        if (!author) return;
+
+        // API messages don't have styled user-tag HTML, so use plain sanitized name
+        const fancyName = "";
+
+        if (isEntry) {
+            handleEntryMessage(parseInt(msgText, 10), author, fancyName, giveawayData);
+        } else {
+            handleGiveawayCommands(author, msgText, fancyName, giveawayData);
+        }
     }
 
     function getAuthor(msgNode) {
@@ -3260,7 +3291,7 @@ body.host-panel-dragging * {
             return (await res.json()).data;
         }
 
-        /* ---- called by the 10-second timer ---- */
+        /* ---- called by the timer ---- */
         async poll() {
             const perfStart = PERF ? performance.now() : 0;
             let messages;
@@ -3270,34 +3301,51 @@ body.host-panel-dragging * {
                 if (DEBUG_SETTINGS.log_chat_messages) console.error("Sponsor API error:", e);
                 return;
             }
-            /* — filter new, unprocessed gift messages — */
+
             const gifts = [];
+            const chatEntries = [];
+
             for (const m of messages) {
                 if (this.processedIds.has(m.id)) continue;
+                if (processedApiMessageIds.has(m.id)) continue;
                 if (Date.parse(m.created_at) <= this.giveawayStartTs) continue;
+
+                this.processedIds.add(m.id);
+                processedApiMessageIds.add(m.id);
 
                 const msgText = m.message || "";
                 const isSystemBot = !!m.bot?.is_systembot;
-                if (isSystemBot && msgText.includes("has gifted")) gifts.push(m);
+
+                // Gift messages from system bot
+                if (isSystemBot && msgText.includes("has gifted")) {
+                    gifts.push(m);
+                    continue;
+                }
+
+                // Regular user messages — process as entries/commands
+                if (!isSystemBot && m.user && msgText) {
+                    chatEntries.push(m);
+                }
             }
 
-            // advance cursor for all messages, like before
+            // advance cursor for all messages
             for (const m of messages) {
                 if (m.id > this.lastMsgId) this.lastMsgId = m.id;
             }
 
-            /* parse & buffer gifts */
+            // Process gift sponsorships
             for (const msg of gifts) {
-                this.processedIds.add(msg.id);
-
                 const { gifter, recipient, amount } = this.parseGiftMsg(msg.message);
-                if (!gifter || recipient !== this.data.host) continue; // only count gifts to the host
-
+                if (!gifter || recipient !== this.data.host) continue;
                 this.buffer.push({ gifter, amount });
-                this.applyGift(gifter, amount); // update totals immediately
+                this.applyGift(gifter, amount);
             }
 
-            /* send ONE summary line if anything new arrived */
+            // Process entries and commands from API (cross-page support)
+            for (const msg of chatEntries) {
+                processApiMessage(msg);
+            }
+
             if (this.buffer.length) this.maybeFlush();
             if (PERF) perfMeasure('sponsor_poll', perfStart);
         }
@@ -5751,18 +5799,18 @@ body.host-panel-dragging * {
 
     function loadGiveawayStats() {
         // Read both locations
-        const gmVal = (typeof GM_getValue === "function") ? GM_getValue(STATS_KEY_GM, null) : null;
+        const gmVal = (typeof GM_getValue === "function") ? GM_getValue(STATS_KEY, null) : null;
         const gmObj = (gmVal && typeof gmVal === "object") ? normalizeGiveawayStatsShape(gmVal) : null;
 
-        const lsRaw = safeParseLocalStorage(STATS_KEY_LS);
+        const lsRaw = safeParseLocalStorage(STATS_KEY);
         const lsObj = lsRaw ? normalizeGiveawayStatsShape(lsRaw) : null;
 
         // If both missing/corrupt
         if (!gmObj && !lsObj) {
             const fresh = defaultGiveawayStats();
             // Seed both so they stay in sync from day 1
-            if (typeof GM_setValue === "function") GM_setValue(STATS_KEY_GM, fresh);
-            try { localStorage.setItem(STATS_KEY_LS, JSON.stringify(fresh)); } catch {}
+            if (typeof GM_setValue === "function") GM_setValue(STATS_KEY, fresh);
+            try { localStorage.setItem(STATS_KEY, JSON.stringify(fresh)); } catch {}
             return fresh;
         }
 
@@ -5774,10 +5822,10 @@ body.host-panel-dragging * {
         // Heal the other side if needed
         if (best) {
             if (!gmObj || gmUpdated < safeGetUpdatedAt(best)) {
-                if (typeof GM_setValue === "function") GM_setValue(STATS_KEY_GM, best);
+                if (typeof GM_setValue === "function") GM_setValue(STATS_KEY, best);
             }
             if (!lsObj || lsUpdated < safeGetUpdatedAt(best)) {
-                try { localStorage.setItem(STATS_KEY_LS, JSON.stringify(best)); } catch {}
+                try { localStorage.setItem(STATS_KEY, JSON.stringify(best)); } catch {}
             }
             return best;
         }
@@ -5792,12 +5840,12 @@ body.host-panel-dragging * {
 
         // Write GM
         if (typeof GM_setValue === "function") {
-            GM_setValue(STATS_KEY_GM, stats);
+            GM_setValue(STATS_KEY, stats);
         }
 
         // Write localStorage
         try {
-            localStorage.setItem(STATS_KEY_LS, JSON.stringify(stats));
+            localStorage.setItem(STATS_KEY, JSON.stringify(stats));
         } catch {
             // If LS quota is exceeded or blocked, we still at least have GM storage.
         }
@@ -7670,4 +7718,19 @@ body.host-panel-dragging * {
         style.textContent = css;
         document.head.appendChild(style);
     }
+
+    // ───────────────────────────────────────────────────────────
+    // SECTION 12: SPA / Turbolinks Navigation Support
+    // ───────────────────────────────────────────────────────────
+    // When the user navigates to another page on the same site via turbolinks,
+    // re-inject the giveaway UI so entries and commands keep working cross-page.
+    window.addEventListener('turbolinks:load', () => {
+        // Re-inject the giveaway button and frame if they were removed during navigation
+        const existingFrame = document.getElementById('giveawayFrame');
+        if (!existingFrame && document.querySelector('#chatbox_header div')) {
+            injectMenu();
+        }
+        // Re-cache chat context (CSRF token, user ID, etc.) which may have changed
+        cacheChatContext();
+    });
 })();

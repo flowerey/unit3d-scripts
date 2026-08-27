@@ -1,11 +1,12 @@
 // ==UserScript==
 // @name         UNIT3D Table Sorter
-// @version      1.0
+// @version      1.1
 // @description  Sort torrent tables by size, age, seeders, and more.
 // @author       blueberry
-// @match        https://*/torrents/similar/*
-// @match        https://*/torrents*
+// @match        https://*/torrents
+// @match        https://*/torrents/*
 // @grant        none
+// @run-at       document-end
 // ==/UserScript==
 
 (function () {
@@ -90,13 +91,20 @@
                 if (i === index) {
                     const span = document.createElement('span');
                     span.className = 'sort-indicator';
-                    span.innerHTML = isDesc ? ' ⏷' : ' ⏶';
+                    span.textContent = isDesc ? ' \u25BC' : ' \u25B2';
                     span.style.color = '#2ecc71';
                     th.appendChild(span);
                 }
             });
         }
     }
+
+    const SORTABLE_TABLES = [
+        '.similar-torrents__torrents',
+        '.table-torrents',
+        '.torrents__torrents',
+        'table.data-table'
+    ].join(', ');
 
     const setupUI = () => {
         const panel = document.querySelector('.panel__heading');
@@ -121,7 +129,7 @@
         btn.onmouseout = () => btn.style.backgroundColor = '#2ecc71';
 
         btn.onclick = () => {
-            const tables = document.querySelectorAll('.similar-torrents__torrents, .table-torrents');
+            const tables = document.querySelectorAll(SORTABLE_TABLES);
             tables.forEach(t => new TableSorter(t));
             btn.remove();
         };
@@ -134,4 +142,5 @@
     } else {
         setupUI();
     }
+    window.addEventListener('turbolinks:load', setupUI);
 })();

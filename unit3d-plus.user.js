@@ -1,134 +1,150 @@
 // ==UserScript==
-// @name         IHD++
-// @namespace    https://infinityhd.net/
-// @version      0.2
-// @description  various QoL improvements to IHD
+// @name         UNIT3D++
+// @description  Various QoL improvements for UNIT3D sites
+// @version      1.0
 // @author       Seraph2
-// @match        https://infinityhd.net/*
+// @match        https://*/torrents*
+// @match        https://*/upload*
 // @grant        none
+// @run-at       document-end
 // ==/UserScript==
-function statsChange() {
-    var badges = document.getElementsByClassName("badge-user");
-    var upload = badges[2];
-    var download = badges[3];
-    var ratio = badges[4];
-    var buffer = badges[5];
-    var warnings = badges[8];
-    var bon = badges[9];
-    var tokens = badges[10];
-    var stats = [upload, download, ratio, buffer, warnings, bon, tokens];
-    var counter = 0;
-    var item;
-    for (const badge of stats) {
-        // this looks disgusting lol
-        switch (counter) {
-            case 0:
-                item = "upload";
-                break;
-            case 1:
-                item = "download";
-                break;
-            case 2:
-                item = "ratio";
-                break;
-            case 3:
-                item = "buffer";
-                break;
-            case 4:
-                item = "warnings";
-                break;
-            case 5:
-                item = "bon";
-                break;
-            case 6:
-                item = "tokens";
-                break;
+
+(function () {
+    'use strict';
+
+    const STAT_NAMES = ['upload', 'download', 'ratio', 'buffer', 'warnings', 'bon', 'tokens'];
+
+    const BADGE_SELECTORS = {
+        upload: 0,
+        download: 1,
+        ratio: 2,
+        buffer: 3,
+        warnings: 4,
+        bon: 5,
+        tokens: 6
+    };
+
+    const TRANSFER_UNITS = ['upload', 'download', 'buffer'];
+
+    function parseTransferValue(text) {
+        const cleaned = text.replace(/[^0-9.\s]/g, ' ').trim();
+        const num = parseFloat(cleaned);
+        if (isNaN(num)) return 0;
+        if (text.includes('TiB')) return num * 1024;
+        if (text.includes('GiB')) return num;
+        if (text.includes('MiB')) return num / 1024;
+        return num;
+    }
+
+    function parseStatValue(text, name) {
+        const cleaned = text.replace(/^\D+/g, '');
+        if (TRANSFER_UNITS.includes(name)) {
+            return parseTransferValue(cleaned);
         }
-        var storedValue = localStorage.getItem(item);
-        var currentValue = badge.textContent.replace(/^\D+/g, "");
-        // converts all transfer quantities into GB
-        if (currentValue.includes("TiB")) {
-            currentValue = currentValue.split(" ")[0] * 1000;
-        } else {
-            if (currentValue.includes("GiB")) {
-                currentValue = currentValue.split(" ")[0];
-            }
+        if (name === 'bon') {
+            return parseInt(cleaned.replace(/\s/g, ''), 10) || 0;
         }
-        var newCurrentValue;
-        if (item != "bon") {
-            newCurrentValue = parseFloat(currentValue);
-        } else {
-            newCurrentValue = parseInt(currentValue.split(" ").join(""));
+        return parseFloat(cleaned) || 0;
+    }
+
+    function formatChange(change, name) {
+        const isTransfer = TRANSFER_UNITS.includes(name);
+        const isHigherBetter = ['upload', 'ratio', 'buffer', 'bon', 'tokens'].includes(name);
+        const sign = change > 0 ? '+' : '';
+        const unit = isTransfer ? ' GiB' : '';
+
+        if (['warnings', 'tokens'].includes(name)) {
+            return `${sign}${change.toPrecision(1)}`;
         }
-        if (storedValue) {
-            var change = newCurrentValue - storedValue;
-            if (["warnings", "tokens"].includes(item)) {
-                change = change.toPrecision(1);
-            } else {
-                change < 1
-                    ? (change = change.toFixed(1))
-                    : (change = +change.toFixed(2));
-            }
-            var ending;
-            if (["upload", "download", "buffer"].includes(item)) {
-                ending = " GiB";
-            } else {
-                ending = "";
-            }
-            if (change && change != 0) {
-                var span = document.createElement("span");
-                var changeIsPositive;
-                Math.sign(change) == 1
-                    ? (changeIsPositive = 1)
-                    : (changeIsPositive = 0);
-                if (["upload", "ratio", "buffer", "bon", "tokens"].includes(item)) {
-                    if (changeIsPositive == 1) {
-                        span.innerHTML = " +" + change.toString() + ending;
-                        span.style.cssText = "color:green;";
-                        badge.appendChild(span);
-                    } else {
-                        span.innerHTML = " " + change.toString() + ending;
-                        span.style.cssText = "color:red;";
-                        badge.appendChild(span);
-                    }
-                } else {
-                    if (changeIsPositive == 1) {
-                        span.innerHTML = " +" + change.toString() + ending;
-                        span.style.cssText = "color:red;";
-                        badge.appendChild(span);
-                    } else {
-                        span.innerHTML = " " + change.toString() + ending;
-                        span.style.cssText = "color:green;";
+        const formatted = Math.abs(change) < 1
+            ? change.toFixed(1)
+            : change.toFixed(2);
+        return `${sign}${formatted}${unit}`;
+    }
+
+    function getChangeColor(change, name) {
+        const isHigherBetter = ['upload', 'ratio', 'buffer', 'bon', 'tokens'].includes(name);
+        const positive = change > 0;
+        if (isHigherBetter) {
+            return positive ? 'green' : 'red';
+        }
+        return positive ? 'red' : 'green';
+    }
+
+    function statsChange() {
+        const badges = document.querySelectorAll('.badge-user');
+        if (badges.length < 7) return;
+
+        STAT_NAMES.forEach((name, i) => {
+            try {
+                const badge = badges[i];
+                if (!badge) return;
+
+                const storedValue = localStorage.getItem(name);
+                const currentValue = badge.textContent;
+                const numValue = parseStatValue(currentValue, name);
+
+                if (storedValue !== null) {
+                    const prevValue = parseFloat(storedValue);
+                    const change = numValue - prevValue;
+
+                    if (change !== 0) {
+                        const span = document.createElement('span');
+                        span.textContent = ` ${formatChange(change, name)}`;
+                        span.style.color = getChangeColor(change, name);
                         badge.appendChild(span);
                     }
                 }
+
+                localStorage.setItem(name, String(numValue));
+            } catch (e) {
+                // Skip this stat on error
             }
-            localStorage.setItem(item, newCurrentValue);
-        } else {
-            localStorage.setItem(item, newCurrentValue);
-        }
-        counter++;
+        });
     }
-}
 
-function randomTorrent() {
-    var buttons = document.getElementsByClassName("button-left")[0];
-    var latestTorrent = document
-        .getElementById("facetedSearch")
-        .childNodes[1].childNodes[3].childNodes[3].querySelector("tr:not(.success)")
-        .childNodes[7].childNodes[1].href; // get the first non-featured torrent in the list
-    var latestTorrentID = latestTorrent.split("/");
-    latestTorrentID = parseInt(latestTorrentID[latestTorrentID.length - 1]);
-    var randomTorrentID = Math.floor(Math.random() * (latestTorrentID - 1) + 1); // generate random torrent ID
-    var randomURL = "https://infinityhd.net/torrents/" + randomTorrentID;
-    var randomButton = document.createElement("a");
-    randomButton.setAttribute("href", randomURL);
-    randomButton.innerText = "? Random Torrent";
-    randomButton.className += "btn btn-sm btn-warning";
-    buttons.appendChild(randomButton);
-}
+    function randomTorrent() {
+        try {
+            const buttons = document.querySelector('.button-left');
+            if (!buttons) return;
 
-statsChange();
-if (window.location.href.endsWith("/torrents")) {
-    randomTorrent();
-}
+            const table = document.querySelector('#facetedSearch table, .table-torrents');
+            if (!table) return;
+
+            const rows = table.querySelectorAll('tr:not(.success)');
+            if (rows.length === 0) return;
+
+            const firstRow = rows[0];
+            const link = firstRow.querySelector('a[href*="/torrents/"]');
+            if (!link) return;
+
+            const href = link.getAttribute('href');
+            const idMatch = href.match(/\/torrents\/(\d+)/);
+            if (!idMatch) return;
+
+            const latestId = parseInt(idMatch[1], 10);
+            const randomId = Math.floor(Math.random() * (latestId - 1)) + 1;
+            const baseUrl = window.location.origin;
+
+            const randomButton = document.createElement('a');
+            randomButton.href = `${baseUrl}/torrents/${randomId}`;
+            randomButton.textContent = '? Random Torrent';
+            randomButton.className = 'btn btn-sm btn-warning';
+            buttons.appendChild(randomButton);
+        } catch (e) {
+            // Silently fail
+        }
+    }
+
+    statsChange();
+    if (window.location.pathname.endsWith('/torrents')) {
+        randomTorrent();
+    }
+
+    window.addEventListener('turbolinks:load', () => {
+        statsChange();
+        if (window.location.pathname.endsWith('/torrents')) {
+            randomTorrent();
+        }
+    });
+})();

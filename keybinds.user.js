@@ -1,22 +1,25 @@
 // ==UserScript==
 // @name         UNIT3D Keybinds
-// @version      1.0
+// @version      1.1
 // @description  Adds keybinds to UNIT3D.
 // @author       blueberry
 // @match        https://*/torrents/*
 // @grant        none
+// @run-at       document-end
 // ==/UserScript==
 
 (function () {
     'use strict';
 
     const UI = {
+        toastEl: null,
+        toastTimeout: null,
+
         showToast(message, type = 'error') {
-            let toast = document.getElementById('unit3d-kb-toast');
-            if (!toast) {
-                toast = document.createElement('div');
-                toast.id = 'unit3d-kb-toast';
-                Object.assign(toast.style, {
+            if (!this.toastEl) {
+                this.toastEl = document.createElement('div');
+                this.toastEl.id = 'unit3d-kb-toast';
+                Object.assign(this.toastEl.style, {
                     position: 'fixed',
                     top: '20px',
                     right: '20px',
@@ -32,30 +35,32 @@
                     opacity: '0',
                     transform: 'translateY(-20px)'
                 });
-                document.body.appendChild(toast);
+                document.body.appendChild(this.toastEl);
             }
-            toast.innerText = message;
-            toast.style.backgroundColor = type === 'error' ? '#e74c3c' : '#2ecc71';
-            toast.style.opacity = '1';
-            toast.style.transform = 'translateY(0)';
+            this.toastEl.innerText = message;
+            this.toastEl.style.backgroundColor = type === 'error' ? '#e74c3c' : '#2ecc71';
+            this.toastEl.style.opacity = '1';
+            this.toastEl.style.transform = 'translateY(0)';
 
-            clearTimeout(toast.timeout);
-            toast.timeout = setTimeout(() => {
-                toast.style.opacity = '0';
-                toast.style.transform = 'translateY(-20px)';
+            clearTimeout(this.toastTimeout);
+            this.toastTimeout = setTimeout(() => {
+                this.toastEl.style.opacity = '0';
+                this.toastEl.style.transform = 'translateY(-20px)';
             }, 3000);
         },
 
-        showHelp() {
-            let overlay = document.getElementById('unit3d-kb-help');
-            if (overlay) {
-                overlay.remove();
+        helpOverlay: null,
+
+        toggleHelp() {
+            if (this.helpOverlay) {
+                this.helpOverlay.remove();
+                this.helpOverlay = null;
                 return;
             }
 
-            overlay = document.createElement('div');
-            overlay.id = 'unit3d-kb-help';
-            Object.assign(overlay.style, {
+            this.helpOverlay = document.createElement('div');
+            this.helpOverlay.id = 'unit3d-kb-help';
+            Object.assign(this.helpOverlay.style, {
                 position: 'fixed',
                 top: '0',
                 left: '0',
@@ -90,7 +95,8 @@
                 { key: 'T', desc: 'Search YouTube Trailer' },
                 { key: 'E', desc: 'Edit Torrent' },
                 { key: 'B', desc: 'Back to Torrents' },
-                { key: '?', desc: 'Show/Hide this help' }
+                { key: '?', desc: 'Show/Hide this help' },
+                { key: 'Esc', desc: 'Close this help' }
             ];
 
             content.innerHTML = `
@@ -101,9 +107,12 @@
                 <div style="margin-top: 30px; text-align: center; font-size: 12px; color: #666;">Click anywhere to close</div>
             `;
 
-            overlay.appendChild(content);
-            overlay.onclick = () => overlay.remove();
-            document.body.appendChild(overlay);
+            this.helpOverlay.appendChild(content);
+            this.helpOverlay.onclick = () => {
+                this.helpOverlay.remove();
+                this.helpOverlay = null;
+            };
+            document.body.appendChild(this.helpOverlay);
         }
     };
 
@@ -113,6 +122,7 @@
                 title: 'h1.meta__title',
                 metaLink: 'a.meta-id-tag'
             };
+            this.boundHandler = this.handleKeydown.bind(this);
             this.init();
         }
 
@@ -134,7 +144,8 @@
         }
 
         init() {
-            document.addEventListener('keydown', (e) => this.handleKeydown(e));
+            document.removeEventListener('keydown', this.boundHandler);
+            document.addEventListener('keydown', this.boundHandler);
         }
 
         handleKeydown(e) {
@@ -142,6 +153,15 @@
             if (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || active.isContentEditable) return;
 
             const key = e.key.toLowerCase();
+
+            if (key === 'escape') {
+                if (UI.helpOverlay) {
+                    e.preventDefault();
+                    UI.toggleHelp();
+                }
+                return;
+            }
+
             const { name, year } = this.getMediaInfo();
             const query = encodeURIComponent(`${name} ${year}`.trim());
 
@@ -164,7 +184,7 @@
                     window.location.href = `${window.location.origin}${path}/edit`;
                 },
                 'b': () => window.location.href = `${window.location.origin}/torrents`,
-                '?': () => UI.showHelp()
+                '?': () => UI.toggleHelp()
             };
 
             if (actions[key]) {
@@ -180,4 +200,5 @@
     } else {
         start();
     }
+    window.addEventListener('turbolinks:load', start);
 })();

@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         UNIT3D Torrent Highlighter
-// @version      1.0
+// @version      1.1
 // @description  UNIT3D torrent row highlighting and visual enhancements.
 // @author       blueberry
 // @match        https://*/torrents/*
@@ -38,20 +38,22 @@
             background-repeat: repeat;
         }
 
-        .unit3d-icon-beep { animation: unit3d-beep 1.5s ease-in-out infinite; }
-        @keyframes unit3d-beep {
-            0%, 100% { opacity: 0.6; filter: drop-shadow(0 0 0 transparent); }
-            50% { opacity: 1; filter: drop-shadow(0 0 8px currentColor); }
+        .unit3d-icon-pulse {
+            animation: unit3d-pulse 2s ease-in-out infinite;
+        }
+        @keyframes unit3d-pulse {
+            0%, 100% { opacity: 0.7; }
+            50% { opacity: 1; }
         }
 
         .unit3d-trump-alert {
             display: inline-flex !important;
             margin-left: 8px;
-            animation: unit3d-trump 0.8s ease-in-out infinite;
+            animation: unit3d-trump 2s ease-in-out infinite;
         }
         @keyframes unit3d-trump {
-            0%, 100% { filter: drop-shadow(0 0 2px #ff4757); }
-            50% { filter: drop-shadow(0 0 10px #ff4757); transform: scale(1.15); }
+            0%, 100% { filter: drop-shadow(0 0 1px rgba(255,71,87,0.3)); }
+            50% { filter: drop-shadow(0 0 4px rgba(255,71,87,0.5)); }
         }
     `;
 
@@ -102,7 +104,6 @@
             const nameEl = row.querySelector('.torrent-search--list__name, .torrent-search--grouped__name a');
             if (!nameEl) return;
 
-            // Define statuses and colors with priority (lower index = higher priority)
             const statuses = [
                 { id: 'int', color: CONFIG.colors.internal, icon: '.torrent-icons__internal', check: () => true },
                 { id: 'fl', color: CONFIG.colors.freeleech, icon: '.torrent-icons__freeleech', check: (el) => el.title.includes('100% Free') || el.title.includes('Global Freeleech') },
@@ -121,9 +122,7 @@
             }
 
             if (active.length > 0) {
-                // Background is the highest priority status
                 const primaryColor = active[0].color;
-                
                 nameEl.classList.add('unit3d-name-badge');
                 nameEl.style.backgroundColor = primaryColor;
             }
@@ -154,12 +153,19 @@
         }
 
         animateIcons(row) {
-            row.querySelectorAll('.torrent-icons i:not(.unit3d-icon-beep)').forEach(icon => {
-                const skip = ['fa-comment', 'fa-magic', 'fa-trump'];
-                if (!skip.some(s => icon.className.includes(s))) {
-                    icon.classList.add('unit3d-icon-beep');
+            const specialIcons = [
+                '.torrent-icons__internal',
+                '.torrent-icons__freeleech',
+                '.torrent-icons__double-upload',
+                '.torrent-icons__highspeed'
+            ];
+
+            for (const selector of specialIcons) {
+                const icon = row.querySelector(selector);
+                if (icon && !icon.classList.contains('unit3d-icon-pulse')) {
+                    icon.classList.add('unit3d-icon-pulse');
                 }
-            });
+            }
         }
     }
 

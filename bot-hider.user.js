@@ -1,9 +1,10 @@
 // ==UserScript==
 // @name         UNIT3D Bot Hider
-// @version      1.0
+// @version      1.1
 // @description  Toggles the visibility of bot messages on UNIT3D chatbox.
 // @author       blueberry
-// @match        https://*/*
+// @match        https://*/chatbox*
+// @match        https://*/chat/*
 // @grant        none
 // @run-at       document-end
 // ==/UserScript==
@@ -12,10 +13,11 @@
     'use strict';
 
     const CONFIG = {
-        BOT_NAMES: ['SystemBot'], // Add more bot names here as needed
+        BOT_NAMES: ['SystemBot'],
         STORAGE_KEY: 'bh_enabled',
         SELECTORS: {
             MESSAGES: 'li, article.chatbox-message',
+            CHAT_CONTAINER: '.chatroom__messages, #chatbox__messages',
             UI_PANEL: '#chatbox_header .panel__actions',
             WRAPPER_ID: 'bothider-wrap'
         }
@@ -24,6 +26,7 @@
     class BotHider {
         constructor() {
             this.isEnabled = localStorage.getItem(CONFIG.STORAGE_KEY) !== 'false';
+            this.observer = null;
             this.init();
         }
 
@@ -40,27 +43,27 @@
             style.id = 'bothider-custom-css';
             style.textContent = `
                 .bh-inactive { display: none !important; }
-                #bothider-wrap { 
-                    display: flex; 
-                    align-items: center; 
-                    padding: 0 10px; 
-                    border-right: 1px solid rgba(255,255,255,0.1); 
-                    height: 100%; 
+                #bothider-wrap {
+                    display: flex;
+                    align-items: center;
+                    padding: 0 10px;
+                    border-right: 1px solid rgba(255,255,255,0.1);
+                    height: 100%;
                 }
-                .bh-toggle { 
-                    display: flex; 
-                    align-items: center; 
-                    gap: 6px; 
-                    cursor: pointer; 
-                    user-select: none; 
+                .bh-toggle {
+                    display: flex;
+                    align-items: center;
+                    gap: 6px;
+                    cursor: pointer;
+                    user-select: none;
                     transition: opacity 0.2s;
                 }
                 .bh-toggle:hover { opacity: 0.8; }
                 .bh-toggle input { cursor: pointer; margin: 0; }
-                .bh-toggle span { 
-                    font-size: 11px; 
-                    font-weight: 600; 
-                    text-transform: uppercase; 
+                .bh-toggle span {
+                    font-size: 11px;
+                    font-weight: 600;
+                    text-transform: uppercase;
                     color: rgba(255,255,255,0.9);
                     letter-spacing: 0.5px;
                 }
@@ -109,7 +112,12 @@
         }
 
         setupObserver() {
-            const observer = new MutationObserver((mutations) => {
+            if (this.observer) this.observer.disconnect();
+
+            const container = document.querySelector(CONFIG.SELECTORS.CHAT_CONTAINER);
+            if (!container) return;
+
+            this.observer = new MutationObserver((mutations) => {
                 let shouldProcess = false;
                 for (const mutation of mutations) {
                     if (mutation.addedNodes.length > 0) {
@@ -124,11 +132,10 @@
                 }
             });
 
-            observer.observe(document.body, { childList: true, subtree: true });
+            this.observer.observe(container, { childList: true, subtree: true });
         }
     }
 
-    // Initialize on page load and turbolinks navigation
     const start = () => new BotHider();
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', start);

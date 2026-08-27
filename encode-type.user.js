@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         UNIT3D Encode Type
 // @namespace    https://github.com/flowerey/unit3d-scripts
-// @version      2.0
+// @version      2.1
 // @description  Adds encode analysis, compatibility checks, and quality indicators to mediainfo.
 // @author       blueberry
 // @match        https://*/torrents/*
@@ -811,6 +811,197 @@
     }
 
     // ───────────────────────────────────────────────────────────
+    // Quality Score (0-100)
+    // ───────────────────────────────────────────────────────────
+    function calculateQualityScore() {
+        let score = 50; // baseline
+        const s = state.videoSettings;
+
+        // Bits per pixel (up to +15)
+        if (state.bitsPerPixel !== null) {
+            const bpp = state.bitsPerPixel;
+            if (bpp >= 0.04 && bpp <= 0.15) score += 15;
+            else if (bpp >= 0.025 && bpp < 0.04) score += 8;
+            else if (bpp > 0.15 && bpp <= 0.20) score += 10;
+            else if (bpp < 0.025) score -= 10;
+        }
+
+        // Encoder quality (+/- 10)
+        const lib = (state.writingLibrary || "").toLowerCase();
+        if (lib.includes("x264") || lib.includes("x265")) score += 10;
+        else if (lib.includes("svt")) score += 8;
+        else if (lib.includes("aom") || lib.includes("libaom")) score += 6;
+        else if (lib.includes("ffmpeg") || lib.includes("lavc")) score -= 5;
+
+        // Preset quality (+/- 8)
+        if (s.preset) {
+            const slowPresets = ["veryslow", "slower", "slow"];
+            const fastPresets = ["ultrafast", "superfast", "veryfast", "faster", "fast"];
+            if (slowPresets.includes(s.preset)) score += 8;
+            else if (fastPresets.includes(s.preset)) score -= 8;
+        }
+
+        // CRF/encode quality (+/- 5)
+        if (s.rc === "crf" && s.crf) {
+            const crf = parseInt(s.crf, 10);
+            if (crf <= 18) score += 5;
+            else if (crf <= 22) score += 3;
+            else if (crf > 28) score -= 5;
+        }
+
+        // b-adapt (+/- 3)
+        if (s["b-adapt"] == 2) score += 3;
+        else if (s["b-adapt"] == 0) score -= 3;
+
+        // Lossless penalty
+        if (s.crf == 0 || s.qp == 0) score -= 5;
+
+        // Scan type (+/- 3)
+        if (state.scanType && state.scanType.toLowerCase().includes("progressive")) score += 3;
+        else if (state.scanType && !state.scanType.toLowerCase().includes("progressive")) score -= 3;
+
+        // Frame rate mode (+/- 2)
+        if (state.frameRateMode && state.frameRateMode.toLowerCase().includes("constant")) score += 2;
+        else if (state.frameRateMode && state.frameRateMode.toLowerCase().includes("variable")) score -= 2;
+
+        // HDR bonus (+3)
+        if (state.videoHdrFormat && state.videoHdrFormat !== "SDR") score += 3;
+
+        // DXVA/stream optimized bonus (+3)
+        if (is_dxva()) score += 3;
+        if (is_stream_op()) score += 3;
+
+        return Math.max(0, Math.min(100, score));
+    }
+
+    function getScoreColor(score) {
+        if (score >= 80) return '#66ff66';
+        if (score >= 60) return '#ffcc00';
+        if (score >= 40) return '#ff9900';
+        return '#ff4d4d';
+    }
+
+    function getScoreLabel(score) {
+        if (score >= 80) return 'Excellent';
+        if (score >= 60) return 'Good';
+        if (score >= 40) return 'Fair';
+        return 'Poor';
+    }
+
+    function injectQualityScore() {
+        const score = calculateQualityScore();
+        const color = getScoreColor(score);
+        const label = getScoreLabel(score);
+
+        const panel = getMediainfoSection();
+        if (!panel || !panel.parentNode) return;
+
+        const scoreEl = document.createElement('div');
+        scoreEl.style.cssText = `
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 14px;
+            border-radius: 6px;
+            border: 1px solid ${color};
+            color: ${color};
+            font-size: 13px;
+            font-weight: 600;
+            margin-bottom: 8px;
+            background: rgba(0,0,0,0.2);
+        `;
+        scoreEl.innerHTML = `<span style="font-size:18px; font-weight:700;">${score}</span><span style="font-size:11px; opacity:0.8;">/100 ${label}</span>`;
+        scoreEl.title = `Quality Score: ${score}/100 (${label})`;
+        panel.parentNode.insertBefore(scoreEl, panel);
+    }
+
+    // ───────────────────────────────────────────────────────────
+    // Export Report
+    // ───────────────────────────────────────────────────────────
+    function generateReport() {
+        const lines = [];
+        const title = document.querySelector('h1.meta__title');
+        lines.push(`Encode Analysis Report`);
+        lines.push(`${title ? title.textContent.trim() : window.location.href}`);
+        lines.push(`${'─'.repeat(50)}`);
+        lines.push('');
+
+        const score = calculateQualityScore();
+        lines.push(`Quality Score: ${score}/100 (${getScoreLabel(score)})`);
+        lines.push('');
+
+        const categories = {};
+        for (const r of state.analysisResults) {
+            if (!categories[r.category]) categories[r.category] = [];
+            categories[r.category].push(r);
+        }
+
+        const categoryOrder = ["Bitrate", "Encode", "Compat", "Visual", "Info"];
+        for (const cat of categoryOrder) {
+            const results = categories[cat];
+            if (!results || results.length === 0) continue;
+
+            lines.push(`[${cat}]`);
+            for (const r of results) {
+                const icon = r.status === "pass" ? "[OK]" : r.status === "warn" ? "[!!]" : r.status === "fail" ? "[XX]" : "[--]";
+                const detail = r.detail ? ` — ${r.detail}` : '';
+                lines.push(`  ${icon} ${r.name}: ${r.value}${detail}`);
+            }
+            lines.push('');
+        }
+
+        // DXVA / Stream Op
+        lines.push(`[Checks]`);
+        lines.push(`  DXVA: ${is_dxva() ? 'Compatible' : `Incompatible (${state.dxvaOpFailed.length} issues)`}`);
+        if (!is_dxva()) state.dxvaOpFailed.forEach(f => lines.push(`    - ${f}`));
+        lines.push(`  Stream Opt: ${is_stream_op() ? 'Compatible' : `Incompatible (${state.streamOpFailed.length} issues)`}`);
+        if (!is_stream_op()) state.streamOpFailed.forEach(f => lines.push(`    - ${f}`));
+        lines.push('');
+        lines.push(`Generated: ${new Date().toISOString()}`);
+
+        return lines.join('\n');
+    }
+
+    function injectExportButton() {
+        const panel = getMediainfoSection();
+        if (!panel || !panel.parentNode) return;
+
+        const btn = document.createElement('button');
+        btn.textContent = 'Copy Report';
+        btn.style.cssText = `
+            padding: 4px 12px;
+            background: #333;
+            color: #ddd;
+            border: 1px solid #555;
+            border-radius: 4px;
+            font-size: 11px;
+            cursor: pointer;
+            margin-bottom: 8px;
+            transition: all 0.2s;
+        `;
+        btn.onmouseover = () => { btn.style.background = '#2ecc71'; btn.style.borderColor = '#2ecc71'; };
+        btn.onmouseout = () => { btn.style.background = '#333'; btn.style.borderColor = '#555'; };
+        btn.onclick = () => {
+            const report = generateReport();
+            navigator.clipboard.writeText(report).then(() => {
+                btn.textContent = 'Copied!';
+                setTimeout(() => { btn.textContent = 'Copy Report'; }, 2000);
+            }).catch(() => {
+                const ta = document.createElement('textarea');
+                ta.value = report;
+                document.body.appendChild(ta);
+                ta.select();
+                document.execCommand('copy');
+                ta.remove();
+                btn.textContent = 'Copied!';
+                setTimeout(() => { btn.textContent = 'Copy Report'; }, 2000);
+            });
+        };
+
+        panel.parentNode.insertBefore(btn, panel);
+    }
+
+    // ───────────────────────────────────────────────────────────
     // Display: Collapsible Analysis Panel
     // ───────────────────────────────────────────────────────────
     function injectAnalysisPanel() {
@@ -1000,6 +1191,8 @@
         insert_enc_type();
         set_container();
         addMediainfoEntries();
+        injectQualityScore();
+        injectExportButton();
         injectAnalysisPanel();
     }
 

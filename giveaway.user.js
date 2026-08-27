@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         UNIT3D BON Giveaway
 // @namespace    https://github.com/flowerey/unit3d-scripts
-// @version      6.3.0
+// @version      6.4.0
 // @description  Enables the functionality to become poor
 // @author       blueberry, Nums
 // @match        https://*/
@@ -275,8 +275,8 @@
     });
 
     // only run the cooldown/spam‑detection logic on available commands
-    const baseCommands = ["time", "entries", "help", "commands", "bon", "range", "gift","random", "number", "free", "lucky", "luckye", "rig", "unrig", "stats", "top", "most", "sponsors", "unlucky", "largest", "scale"];
-    const hostCommands = ["addtime", "removetime", "reminder", "addbon", "end", "winners", "maxwinners", "naughty"];
+    const baseCommands = ["time", "entries", "help", "commands", "bon", "range", "gift","random", "number", "free", "lucky", "luckye", "rig", "unrig", "stats", "top", "most", "sponsors", "unlucky", "largest", "scale", "host"];
+    const hostCommands = ["addtime", "removetime", "reminder", "addbon", "end", "winners", "maxwinners", "naughty", "history"];
     const uploadCxExtras = ["ruckus", "ick", "corigins", "lejosh", "suckur", "bloom", "dawg", "greglechin"];
     const validCommands = new Set([
         ...baseCommands,
@@ -329,6 +329,8 @@
                   ] },
         end: { label: "End", section: "giveaway", description: "End the active giveaway.", usage: "!end [host]", requiresGiveaway: true, hostOnly: true,
               args: [{ name: "host", label: "Host", type: "username", required: false, placeholder: "optional host" }] },
+        host: { label: "Quick Host", section: "giveaway", description: "Start giveaway: !host <amount> <start>-<end> <time>m [w]winners", usage: "!host 1000 1-100 5m 3w", requiresGiveaway: false },
+        history: { label: "History", section: "info", description: "Show past giveaway history.", usage: "!history [N]", requiresGiveaway: false },
         suckur: { label: "Suckur", section: "fun", description: "Upload.cx fun command.", usage: "!suckur", requiresGiveaway: false },
         ruckus: { label: "Ruckus", section: "fun", description: "Upload.cx fun command.", usage: "!ruckus", requiresGiveaway: false },
         ick: { label: "Ick", section: "fun", description: "Upload.cx fun command.", usage: "!ick", requiresGiveaway: false },
@@ -4402,6 +4404,74 @@ body.host-panel-dragging * {
                 logEvent("Giveaway stop requested", `Requested by admin ${sanitizeNick(author)} via !end ${sanitizeNick(giveawayData.host)}.`);
                 endGiveaway();
             }
+        },
+
+        host(ctx) {
+            const { author, args, reply, say } = ctx;
+            if (giveawayData) {
+                reply("[color=red]A giveaway is already active. End it first with !end[/color]");
+                return;
+            }
+            // Format: !host <amount> <start>-<end> <time>m [w]winners
+            // Example: !host 1000 1-100 5m 3w
+            if (args.length < 3) {
+                reply("[color=red]Usage:[/color] !host <amount> <start>-<end> <time>m [Nw]\nExample: !host 1000 1-100 5m 3w");
+                return;
+            }
+            const amount = parseInt(args[0], 10);
+            const rangeMatch = (args[1] || "").match(/^(-?\d+)\s*-\s*(-?\d+)$/);
+            const timeMatch = (args[2] || "").match(/^(\d+)\s*m$/i);
+            if (!amount || amount <= 0 || !rangeMatch || !timeMatch) {
+                reply("[color=red]Usage:[/color] !host <amount> <start>-<end> <time>m [Nw]\nExample: !host 1000 1-100 5m 3w");
+                return;
+            }
+            const startNum = parseInt(rangeMatch[1], 10);
+            const endNum = parseInt(rangeMatch[2], 10);
+            const minutes = parseInt(timeMatch[1], 10);
+            let winners = 1;
+            if (args[3]) {
+                const wMatch = args[3].match(/^(\d+)\s*w$/i);
+                if (wMatch) winners = Math.max(1, Math.min(MAX_WINNERS, parseInt(wMatch[1], 10)));
+            }
+            if (startNum >= endNum) { reply("[color=red]Start must be less than end.[/color]"); return; }
+            if (minutes < 1) { reply("[color=red]Time must be at least 1 minute.[/color]"); return; }
+            if (amount <= 0) { reply("[color=red]Amount must be positive.[/color]"); return; }
+            // Fill the form fields and trigger start
+            coinInput.value = amount;
+            startInput.value = startNum;
+            endInput.value = endNum;
+            timerInput.value = minutes;
+            winnersInput.value = winners;
+            customMessageInput.value = "";
+            startGiveaway();
+        },
+
+        history(ctx) {
+            const { reply, args } = ctx;
+            const n = Math.min(STATS_MAX_TOP_N, Math.max(1, parseInt(args[0] || 5, 10) || 5));
+            const stats = getStatsForRead();
+            const all = Array.isArray(stats.giveaways) ? stats.giveaways.slice() : [];
+            if (!all.length) {
+                reply("[b]No giveaway history saved yet.[/b]");
+                return;
+            }
+            const recent = all
+                .filter(g => g && typeof g === "object")
+                .sort((a, b) => (Number(b.endedAt) || 0) - (Number(a.endedAt) || 0))
+                .slice(0, n);
+            if (!recent.length) {
+                reply("[b]No giveaway history saved yet.[/b]");
+                return;
+            }
+            const out = recent.map((g, i) => {
+                const amt = fmtBON(Number(g.amount) || 0);
+                const winners = Number(g.winnersCount) || 0;
+                const entries = Number(g.entriesCount) || 0;
+                const host = g.host ? sanitizeNick(g.host) : "?";
+                const d = g.endedDate || "";
+                return `${i + 1}) [color=#ffc00a]${amt}B[/color] [color=#1DDC5D]${winners}W[/color] [color=#9aa0a6]${entries}E[/color] by [color=#d85e27]${host}[/color]${d ? ` [color=#666](${d})[/color]` : ""}`;
+            });
+            reply(`[b]📜 Recent giveaways (${recent.length}/${all.length}):\n${out.join("\n")}[/b]`);
         }
     });
 

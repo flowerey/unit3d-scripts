@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         UNIT3D Add Letterboxd/IMDB/RT/TMDB rating
 // @namespace    https://github.com/flowerey/unit3d-scripts
-// @version      1.3
+// @version      1.4
 // @description  Add Ratings to Letterboxd/IMDB/RT/TMDB.
 // @author       blueberry
 // @match        https://*/torrents/similar/*
@@ -64,6 +64,29 @@
             .meta__ids li a.meta-id-tag { display: inline-flex !important; align-items: center; }
             @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
             .meta__filmweb img { width: 18px; height: auto; vertical-align: middle; }
+            .aggregate-score {
+                display: inline-flex;
+                align-items: center;
+                gap: 6px;
+                padding: 4px 12px;
+                border-radius: 6px;
+                font-size: 14px;
+                font-weight: 700;
+                margin-left: 12px;
+                vertical-align: middle;
+                animation: fadeIn 0.3s ease-in;
+                border: 1px solid rgba(255,255,255,0.15);
+            }
+            .aggregate-score .agg-label {
+                font-size: 10px;
+                font-weight: 600;
+                text-transform: uppercase;
+                letter-spacing: 0.5px;
+                opacity: 0.7;
+            }
+            .aggregate-score .agg-value {
+                font-size: 16px;
+            }
         `;
         document.head.appendChild(style);
     };
@@ -91,6 +114,38 @@
         link.appendChild(span);
     };
 
+    const ratings = { imdb: null, rt: null, tmdb: null, lb: null, br: null, mc: null };
+
+    const renderAggregateScore = () => {
+        const scores = [];
+        if (ratings.imdb) scores.push(parseFloat(ratings.imdb));
+        if (ratings.rt) scores.push(parseFloat(ratings.rt) / 10);
+        if (ratings.lb) scores.push(parseFloat(ratings.lb) * 2);
+        if (ratings.mc) scores.push(parseFloat(ratings.mc) / 10);
+        if (ratings.br) scores.push(parseFloat(ratings.br));
+        if (ratings.tmdb) scores.push(parseFloat(ratings.tmdb) / 10);
+
+        if (scores.length < 2) return;
+
+        const avg = scores.reduce((a, b) => a + b, 0) / scores.length;
+        const display = avg.toFixed(1);
+        const color = getColor(display);
+
+        const metaList = document.querySelector('.meta__ids');
+        if (!metaList) return;
+
+        const existing = metaList.querySelector('.aggregate-score');
+        if (existing) return;
+
+        const badge = document.createElement('li');
+        badge.className = 'aggregate-score';
+        badge.style.borderColor = color;
+        badge.style.color = color;
+        badge.innerHTML = `<span class="agg-label">Avg</span><span class="agg-value">${display}</span>`;
+        badge.title = `Aggregate of ${scores.length} rating(s)`;
+        metaList.appendChild(badge);
+    };
+
     const handleFilmweb = (metaList) => {
         if (document.querySelector('.meta__filmweb')) return;
 
@@ -116,17 +171,76 @@
         metaList.appendChild(li);
     };
 
+    const handleMetacritic = (imdbId) => {
+        const cacheKey = `u3d_mc_${imdbId}`;
+        const cached = Cache.get(cacheKey);
+
+        if (cached) {
+            ratings.mc = cached;
+            renderAggregateScore();
+            return;
+        }
+
+        const metaList = document.querySelector('.meta__ids');
+        if (!metaList) return;
+
+        const mcLink = document.createElement('li');
+        mcLink.className = 'meta__metacritic';
+        mcLink.innerHTML = `
+            <a href="https://www.metacritic.com/search/${encodeURIComponent(imdbId)}/" class="meta-id-tag" target="_blank" title="Metacritic">
+                <span style="font-size:12px; font-weight:700; color:#fff; background:#000; padding:2px 6px; border-radius:3px;">MC</span>
+            </a>
+        `;
+        metaList.appendChild(mcLink);
+
+        GM.xmlHttpRequest({
+            method: "GET",
+            url: `https://www.metacritic.com/search/${imdbId}/`,
+            headers: {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+            },
+            onload: (res) => {
+                try {
+                    const match = res.responseText.match(/"scoreValue":\s*"?(\d+)"?/);
+                    if (match && match[1]) {
+                        const score = match[1];
+                        ratings.mc = score;
+                        Cache.set(cacheKey, score);
+
+                        const scoreSpan = document.createElement('span');
+                        scoreSpan.className = 'rating-value';
+                        scoreSpan.style.color = getColor(score, 100);
+                        scoreSpan.innerText = score;
+                        mcLink.querySelector('a').appendChild(scoreSpan);
+
+                        renderAggregateScore();
+                    }
+                } catch (e) {
+                    log("Metacritic parse error", e);
+                }
+            },
+            onerror: (e) => log("Metacritic request error", e)
+        });
+    };
+
     const handleOMDB = (imdbId, els) => {
         const cacheKey = `u3d_omdb_${imdbId}`;
         const cached = Cache.get(cacheKey);
 
         if (cached) {
-            if (cached.imdb) renderRating(els.imdb, cached.imdb, 10);
-            if (cached.rt && els.rt) renderRating(els.rt, cached.rt.replace('%',''), 100, '%');
+            if (cached.imdb) {
+                ratings.imdb = cached.imdb;
+                renderRating(els.imdb, cached.imdb, 10);
+            }
+            if (cached.rt && els.rt) {
+                ratings.rt = cached.rt.replace('%', '');
+                renderRating(els.rt, cached.rt.replace('%', ''), 100, '%');
+            }
             if (cached.rtUrl && els.rt) {
                 const rtLink = els.rt.querySelector('a');
                 if (rtLink) rtLink.href = cached.rtUrl;
             }
+            renderAggregateScore();
             return;
         }
 
@@ -143,21 +257,25 @@
                     const dataToCache = {};
                     if (json.imdbRating && json.imdbRating !== "N/A") {
                         dataToCache.imdb = json.imdbRating;
+                        ratings.imdb = json.imdbRating;
                         renderRating(els.imdb, json.imdbRating, 10);
                     }
 
                     const rtObj = json.Ratings ? json.Ratings.find(r => r.Source === "Rotten Tomatoes") : null;
                     if (rtObj) {
                         dataToCache.rt = rtObj.Value;
-                        if(els.rt) renderRating(els.rt, rtObj.Value.replace('%',''), 100, '%');
+                        ratings.rt = rtObj.Value.replace('%', '');
+                        if (els.rt) renderRating(els.rt, rtObj.Value.replace('%', ''), 100, '%');
                     }
 
                     if (json.tomatoURL && json.tomatoURL !== "N/A") {
                         dataToCache.rtUrl = json.tomatoURL;
-                        if(els.rt && els.rt.querySelector('a')) els.rt.querySelector('a').href = json.tomatoURL;
+                        if (els.rt && els.rt.querySelector('a')) els.rt.querySelector('a').href = json.tomatoURL;
                     }
 
                     if (Object.keys(dataToCache).length > 0) Cache.set(cacheKey, dataToCache);
+
+                    renderAggregateScore();
                 } catch (e) {
                     log("OMDB parse error", e);
                 }
@@ -172,7 +290,9 @@
         const cached = Cache.get(cacheKey);
 
         if (cached) {
+            ratings.lb = cached;
             renderRating(container, cached, 5);
+            renderAggregateScore();
             return;
         }
 
@@ -184,8 +304,10 @@
                 const match = res.responseText.match(/"ratingValue":\s*([0-9.]+)/);
                 if (match && match[1]) {
                     const rating = parseFloat(match[1]).toFixed(1);
+                    ratings.lb = rating;
                     renderRating(container, rating, 5);
                     Cache.set(cacheKey, rating);
+                    renderAggregateScore();
                 }
             },
             onerror: (e) => log("Letterboxd request error", e)
@@ -199,11 +321,15 @@
         const updateUI = (url, rating) => {
             const link = container.querySelector('a');
             if (link && url) link.href = url;
-            if (rating) renderRating(container, rating, 10);
+            if (rating) {
+                ratings.br = rating;
+                renderRating(container, rating, 10);
+            }
         };
 
         if (cached) {
             updateUI(cached.url, cached.rating);
+            renderAggregateScore();
             return;
         }
 
@@ -250,6 +376,7 @@
 
                 Cache.set(cacheKey, { url: targetUrl, rating: rating });
                 updateUI(targetUrl, rating);
+                renderAggregateScore();
             },
             onerror: (e) => log("Blu-ray request error", e)
         });
@@ -286,7 +413,9 @@
         if (Elements.tmdb) {
             const tmdbRatingEl = document.querySelector('.work__rating .work__rating-text');
             if (tmdbRatingEl) {
-                renderRating(Elements.tmdb, tmdbRatingEl.innerText.trim(), 100);
+                const tmdbVal = tmdbRatingEl.innerText.trim();
+                ratings.tmdb = tmdbVal;
+                renderRating(Elements.tmdb, tmdbVal, 100);
                 const oldContainer = document.querySelector('.work__rating');
                 if(oldContainer) oldContainer.remove();
             }
@@ -295,6 +424,7 @@
         if (Elements.imdb || Elements.rt) handleOMDB(imdbId, Elements);
         if (Elements.lb) handleLetterboxd(imdbId, Elements.lb);
         if (Elements.br) handleBluray(imdbId, Elements.br);
+        handleMetacritic(imdbId);
     };
 
     init();

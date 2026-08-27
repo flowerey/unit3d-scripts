@@ -1,8 +1,9 @@
 // ==UserScript==
 // @name         UNIT3D++
-// @description  Various QoL improvements for UNIT3D sites
+// @namespace    https://github.com/flowerey/unit3d-scripts
 // @version      1.0
-// @author       Seraph2
+// @description  Various QoL improvements for UNIT3D sites
+// @author       blueberry
 // @match        https://*/torrents*
 // @match        https://*/upload*
 // @grant        none

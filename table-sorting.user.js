@@ -1,5 +1,6 @@
 // ==UserScript==
 // @name         UNIT3D Table Sorter
+// @namespace    https://github.com/flowerey/unit3d-scripts
 // @version      1.1
 // @description  Sort torrent tables by size, age, seeders, and more.
 // @author       blueberry

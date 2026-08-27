@@ -1,9 +1,9 @@
 // ==UserScript==
-// @name         Encode type
-// @version      0.3
+// @name         UNIT3D Encode Type
+// @namespace    https://github.com/flowerey/unit3d-scripts
+// @version      1.0
 // @description  Adds information to the mediainfo parser.
-// @author       MiM
-// @license      MIT
+// @author       blueberry
 // @match        https://*/torrents/*
 // @grant        none
 // @run-at       document-end

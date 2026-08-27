@@ -1,18 +1,16 @@
 // ==UserScript==
 // @name         UNIT3D Add Letterboxd/IMDB/RT/TMDB rating
+// @namespace    https://github.com/flowerey/unit3d-scripts
 // @version      1.3
 // @description  Add Ratings to Letterboxd/IMDB/RT/TMDB.
-// @license      MIT
+// @author       blueberry
 // @match        https://*/torrents/similar/*
 // @match        https://*/torrents/*
 // @match        https://*/requests/*
-// @author       lsr
 // @grant        GM.xmlHttpRequest
 // @grant        GM_setValue
 // @grant        GM_getValue
 // @run-at       document-end
-// @downloadURL https://update.greasyfork.org/scripts/565485/UNIT3D%20Add%20LetterboxdIMDBRTTMDB%20rating.user.js
-// @updateURL https://update.greasyfork.org/scripts/565485/UNIT3D%20Add%20LetterboxdIMDBRTTMDB%20rating.meta.js
 // ==/UserScript==
 
 (function () {

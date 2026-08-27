@@ -1,5 +1,6 @@
 // ==UserScript==
 // @name         UNIT3D Torrent Highlighter
+// @namespace    https://github.com/flowerey/unit3d-scripts
 // @version      1.1
 // @description  UNIT3D torrent row highlighting and visual enhancements.
 // @author       blueberry

@@ -1,25 +1,20 @@
 // ==UserScript==
-// @name         Blutopia BON Giveaway
-// @namespace    https://openuserjs.org/users/Nums
-// @description  Enables the functionality to become poor
+// @name         UNIT3D BON Giveaway
+// @namespace    https://github.com/flowerey/unit3d-scripts
 // @version      6.3.0
-// @updateURL    https://openuserjs.org/meta/Nums/Blutopia_BON_Giveaway.meta.js
-// @downloadURL  https://openuserjs.org/install/Nums/Blutopia_BON_Giveaway.user.js
-// @connect      openuserjs.org
+// @description  Enables the functionality to become poor
+// @author       blueberry
+// @match        https://*/
 // @grant        GM_xmlhttpRequest
 // @grant        GM_getValue
 // @grant        GM_setValue
-// @license      GPL-3.0-or-later
-// @match        https://*/
-// @run-at document-idle
+// @run-at       document-idle
+// @connect      openuserjs.org
+// @downloadURL  https://openuserjs.org/install/Nums/Blutopia_BON_Giveaway.user.js
+// @updateURL    https://openuserjs.org/meta/Nums/Blutopia_BON_Giveaway.meta.js
 // ==/UserScript==
 
-// ==OpenUserJS==
-// @author Nums
-// ==/OpenUserJS==
-
-//*****If the website is not listed as a match already. Please verify with tracker admins before using this script on their site.*****
-//*****It is unlikely the bon gifting portion of the script will work on any site not in the default match list.*****
+// If the website is not listed as a match already, please verify with tracker admins before using this script on their site.
 
 // Additional credits
 // @TheEther - Integration with Aither + some additional features

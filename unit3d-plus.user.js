@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         UNIT3D++
 // @namespace    https://github.com/flowerey/unit3d-scripts
-// @version      1.2.0
+// @version      1.2.1
 // @description  Various QoL improvements for UNIT3D sites
 // @author       blueberry
 // @match        https://*/torrents*
@@ -373,6 +373,8 @@
     const filter = new TorrentFilter();
 
     function bustAvatarCache() {
+        if (localStorage.getItem('u3d_avatar_cache_bust') !== 'true') return;
+
         const selectors = [
             '.torrent-info__uploader img',
             '.user-profile__avatar img',

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         UNIT3D Forum Bookmarks
 // @namespace    https://github.com/flowerey/unit3d-scripts
-// @version      1.0.0
+// @version      1.0.1
 // @description  Bookmark and manage forum posts on UNIT3D sites
 // @author       blueberry
 // @match        https://*/forums/*
@@ -121,6 +121,11 @@
         return { toggle, panel };
     }
 
+    function escHtml(str) {
+        if (!str) return '';
+        return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
+
     function renderPanel() {
         const panel = document.getElementById('u3d-fb-panel');
         if (!panel) return;
@@ -143,14 +148,14 @@
             <div id="u3d-fb-list" style="max-height:350px;overflow-y:auto;">
                 ${bms.length === 0 ? '<div style="color:#666;text-align:center;padding:20px;">No bookmarks yet</div>' :
                     bms.map(b => `
-                    <div style="padding:8px;margin-bottom:6px;background:#16213e;border-radius:4px;border-left:3px solid #e94560;" data-id="${b.id}">
+                    <div style="padding:8px;margin-bottom:6px;background:#16213e;border-radius:4px;border-left:3px solid #e94560;" data-id="${escHtml(b.id)}">
                         <div style="display:flex;justify-content:space-between;align-items:start;">
                             <div style="flex:1;">
-                                <a href="${b.url}" style="color:#4fc3f7;text-decoration:none;font-size:12px;font-weight:bold;">${b.title}</a>
-                                ${b.topicTitle ? `<div style="font-size:11px;color:#888;margin-top:2px;">${b.topicTitle}</div>` : ''}
-                                <div style="font-size:10px;color:#666;margin-top:2px;">${b.category ? b.category + ' \u2022 ' : ''}${new Date(b.timestamp).toLocaleDateString()}</div>
+                                <a href="${escHtml(b.url)}" style="color:#4fc3f7;text-decoration:none;font-size:12px;font-weight:bold;">${escHtml(b.title)}</a>
+                                ${b.topicTitle ? `<div style="font-size:11px;color:#888;margin-top:2px;">${escHtml(b.topicTitle)}</div>` : ''}
+                                <div style="font-size:10px;color:#666;margin-top:2px;">${b.category ? escHtml(b.category) + ' \u2022 ' : ''}${new Date(b.timestamp).toLocaleDateString()}</div>
                             </div>
-                            <button class="u3d-fb-rm" data-id="${b.id}" style="background:none;color:#f66;border:none;cursor:pointer;font-size:14px;">\u2715</button>
+                            <button class="u3d-fb-rm" data-id="${escHtml(b.id)}" style="background:none;color:#f66;border:none;cursor:pointer;font-size:14px;">\u2715</button>
                         </div>
                     </div>
                 `).join('')}

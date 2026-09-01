@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         UNIT3D Encode Type
 // @namespace    https://github.com/flowerey/unit3d-scripts
-// @version      2.3.0
+// @version      2.3.1
 // @description  Adds encode analysis, compatibility checks, and quality indicators to mediainfo.
 // @author       blueberry
 // @match        https://*/torrents/*
@@ -1222,12 +1222,27 @@
                 row.className = 'ea-row';
 
                 const icon = r.status === "pass" ? "\u2713" : r.status === "warn" ? "\u26A0" : r.status === "fail" ? "\u2717" : "\u2022";
-                row.innerHTML = `
-                    <span class="ea-icon ${r.status}">${icon}</span>
-                    <span class="ea-name">${r.name}</span>
-                    <span class="ea-value">${r.value}</span>
-                    ${r.detail ? `<span class="ea-detail">${r.detail}</span>` : ""}
-                `;
+                const iconSpan = document.createElement('span');
+                iconSpan.className = `ea-icon ${r.status}`;
+                iconSpan.textContent = icon;
+                row.appendChild(iconSpan);
+
+                const nameSpan = document.createElement('span');
+                nameSpan.className = 'ea-name';
+                nameSpan.textContent = r.name;
+                row.appendChild(nameSpan);
+
+                const valueSpan = document.createElement('span');
+                valueSpan.className = 'ea-value';
+                valueSpan.textContent = r.value;
+                row.appendChild(valueSpan);
+
+                if (r.detail) {
+                    const detailSpan = document.createElement('span');
+                    detailSpan.className = 'ea-detail';
+                    detailSpan.textContent = r.detail;
+                    row.appendChild(detailSpan);
+                }
                 catDiv.appendChild(row);
             }
 
@@ -1307,9 +1322,9 @@
             const match = FORMAT_PREFIXES.find(f => text.startsWith(f.prefix));
             if (match) {
                 state.videoFormat = match.format;
-                const bitsMatch = dd.innerHTML.match(/(\d+)\s*bits/);
+                const bitsMatch = dd.textContent.match(/(\d+)\s*bits/);
                 state.videoBits = bitsMatch ? parseInt(bitsMatch[1], 10) : 8;
-                dd.innerHTML = `${dd.innerHTML} - ${get_enc_type()}`;
+                dd.appendChild(document.createTextNode(` - ${get_enc_type()}`));
                 return;
             }
         }

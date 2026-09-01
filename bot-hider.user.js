@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         UNIT3D Bot Hider
 // @namespace    https://github.com/flowerey/unit3d-scripts
-// @version      1.3.1
+// @version      1.3.2
 // @description  Toggles the visibility of bot messages on UNIT3D chatbox.
 // @author       blueberry
 // @match        https://*/chatbox*
@@ -358,12 +358,19 @@
                 items.forEach((item, i) => {
                     const tag = document.createElement('span');
                     tag.className = 'bh-tag';
-                    tag.innerHTML = `${item.replace(/</g, '&lt;')} <span class="bh-tag-remove" data-idx="${i}">\u00D7</span>`;
-                    tag.querySelector('.bh-tag-remove').onclick = (e) => {
+                    const textNode = document.createTextNode(item);
+                    tag.appendChild(textNode);
+                    tag.appendChild(document.createTextNode(' '));
+                    const removeBtn = document.createElement('span');
+                    removeBtn.className = 'bh-tag-remove';
+                    removeBtn.dataset.idx = i;
+                    removeBtn.textContent = '\u00D7';
+                    removeBtn.onclick = (e) => {
                         e.stopPropagation();
                         onRemove(i);
                         renderTagList(container, items, onRemove);
                     };
+                    tag.appendChild(removeBtn);
                     container.appendChild(tag);
                 });
             };

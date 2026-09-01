@@ -11,32 +11,32 @@ A collection of userscripts for UNIT3D-based private trackers. Enhances the brow
 ## Scripts
 
 ### Add Ratings
-> **v1.5** — Matched on: `/torrents/*`, `/torrents/similar/*`, `/requests/*`
+> **v1.5.2** — Matched on: `/torrents/*`, `/requests/*`
 
 Adds Letterboxd, IMDb, Rotten Tomatoes, and Metacritic ratings to torrent pages. Fetches data via the OMDb API with local caching (configurable expiry). Displays an aggregate weighted score across all sources.
 
 ---
 
 ### Bot Hider
-> **v1.3** — Matched on: `/chatbox*`, `/chat/*`
+> **v1.3.2** — Matched on: `/chatbox*`, `/chat/*`
 
 Hides bot messages in the chatbox. Supports filtering by username or custom regex patterns. Configurable bot list, filter modes (show/hide), and a toggle panel. Uses MutationObserver for dynamic messages.
 
 ---
 
 ### Encode Type
-> **v2.2** — Matched on: `/torrents/*`
+> **v2.3.1** — Matched on: `/torrents/*`
 
-Full mediainfo analysis panel on torrent detail pages. Parses video (codec, bitrate, resolution, HDR, frame rate, scan type, color space) and audio (format, channels, bitrate, language) streams. Shows:
+Full mediainfo analysis panel on torrent detail pages. Parses video (AVC, HEVC, AV1, VP9, VP8 — codec, bitrate, resolution, HDR, frame rate, scan type, color space) and audio (format, channels, bitrate, language) streams. Shows:
 
-- Encode compatibility checks
+- Encode compatibility checks (including AV1/VP9 hardware decode)
 - Quality score (0-100) based on bitrate efficiency, encoder, preset, rate control, B-frames, and source quality
 - Exportable analysis report
 
 ---
 
 ### Giveaway
-> **v6.5.0** — Matched on: all pages
+> **v6.5.2** — Matched on: `/chatbox*`, `/chat/*`
 
 Complete BON giveaway system via chat commands. Features:
 
@@ -50,9 +50,9 @@ Complete BON giveaway system via chat commands. Features:
 ---
 
 ### Keybinds
-> **v1.4** — Matched on: `/torrents*`
+> **v1.5.0** — Matched on: `/torrents*`
 
-Keyboard shortcuts for torrent pages:
+Keyboard shortcuts for torrent pages with modifier key support (Ctrl/Shift/Alt):
 
 | Key | Action |
 |-----|--------|
@@ -67,12 +67,12 @@ Keyboard shortcuts for torrent pages:
 | `/` | Focus search |
 | `?` | Show help |
 
-All keybinds are customizable via the settings panel. Press `Escape` to close overlays.
+All keybinds are customizable via the settings panel with modifier key support. Press `Escape` to close overlays.
 
 ---
 
 ### Table Sorting
-> **v1.3** — Matched on: `/torrents`, `/torrents/*`
+> **v1.3.1** — Matched on: `/torrents`, `/torrents/*`
 
 Client-side column sorting on torrent listing tables. Sortable columns: Type, Name, Size, Age, Seeders, Leechers, Completed.
 
@@ -85,7 +85,7 @@ Client-side column sorting on torrent listing tables. Sortable columns: Type, Na
 ---
 
 ### Torrent Highlighter
-> **v1.3** — Matched on: `/torrents/*`, `/torrents/similar/*`
+> **v1.4.1** — Matched on: `/torrents/*`, `/torrents/similar/*`
 
 Color-coded row highlighting based on torrent attributes:
 
@@ -97,15 +97,35 @@ Color-coded row highlighting based on torrent attributes:
 | High Speed | Orange |
 | Low Seeders | Red |
 | You're Seeding | Teal |
+| Language Flags | Auto |
+| Highlighted Uploaders | Configurable |
+| Your Uploads | Configurable |
 
-All colors and toggles are configurable via the settings panel. Configurable min seeder threshold (default: 3).
+Features language flags (50+ languages), per-user/uploader highlighting, and self-upload detection. All colors and toggles are configurable via the settings panel.
 
 ---
 
 ### UNIT3D Plus
-> **v1.1** — Matched on: `/torrents*`, `/upload*`
+> **v1.2.1** — Matched on: `/torrents*`, `/upload*`
 
-Tracks changes to your user stats across page loads. Displays color-coded deltas for: upload, download, ratio, buffer, warnings, BON, and tokens. Green = positive change, red = negative (inverted for warnings).
+Tracks changes to your user stats across page loads. Displays color-coded deltas for: upload, download, ratio, buffer, warnings, BON, and tokens. Includes:
+
+- SVG sparkline charts showing stat trends (last 30 snapshots)
+- Avatar cache-buster (opt-in via `localStorage.setItem('u3d_avatar_cache_bust', 'true')`)
+- Green = positive change, red = negative (inverted for warnings)
+
+---
+
+### Forum Bookmarks
+> **v1.0.1** — Matched on: `/forums/*`, `/forum/*`
+
+Bookmark and manage forum posts on UNIT3D sites. Features:
+
+- Bookmark button on forum posts
+- Bookmarks panel with search, sort (newest/oldest/title)
+- Export/import bookmarks as JSON
+- Clear all bookmarks option
+- Up to 200 bookmarks stored in localStorage
 
 ---
 

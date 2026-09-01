@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         UNIT3D Torrent Highlighter
 // @namespace    https://github.com/flowerey/unit3d-scripts
-// @version      1.4.0
+// @version      1.4.1
 // @description  UNIT3D torrent row highlighting and visual enhancements.
 // @author       blueberry
 // @match        https://*/torrents/*
@@ -566,9 +566,15 @@
                     const tags = panel.querySelector('#unit3d-uploader-tags');
                     const span = document.createElement('span');
                     span.style.cssText = 'display:inline-flex;align-items:center;gap:4px;padding:2px 6px;margin:2px;background:#333;border-radius:3px;font-size:11px;';
-                    span.innerHTML = `${val}<button class="unit3d-rm-uploader" data-user="${val}" style="background:none;color:#f66;border:none;cursor:pointer;font-size:10px;">\u00d7</button>`;
+                    const textNode = document.createTextNode(val);
+                    span.appendChild(textNode);
+                    const removeBtn = document.createElement('button');
+                    removeBtn.className = 'unit3d-rm-uploader';
+                    removeBtn.style.cssText = 'background:none;color:#f66;border:none;cursor:pointer;font-size:10px;';
+                    removeBtn.textContent = '\u00d7';
+                    removeBtn.onclick = () => span.remove();
+                    span.appendChild(removeBtn);
                     tags.appendChild(span);
-                    span.querySelector('.unit3d-rm-uploader').onclick = () => span.remove();
                     input.value = '';
                 }
             };

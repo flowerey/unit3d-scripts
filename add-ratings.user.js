@@ -1,10 +1,9 @@
 // ==UserScript==
 // @name         UNIT3D Add Letterboxd/IMDB/RT/TMDB rating
 // @namespace    https://github.com/flowerey/unit3d-scripts
-// @version      1.5.1
+// @version      1.5.2
 // @description  Add Ratings to Letterboxd/IMDB/RT/TMDB.
 // @author       blueberry
-// @match        https://*/torrents/similar/*
 // @match        https://*/torrents/*
 // @match        https://*/requests/*
 // @downloadURL  https://raw.githubusercontent.com/flowerey/unit3d-scripts/main/add-ratings.user.js
@@ -45,6 +44,7 @@
     };
 
     const Cache = {
+        _maxEntries: 200,
         get: (key) => {
             const data = localStorage.getItem(key);
             if (!data) return null;
@@ -58,7 +58,23 @@
             } catch (e) { return null; }
         },
         set: (key, value) => {
-            localStorage.setItem(key, JSON.stringify({ value: value, timestamp: Date.now() }));
+            try {
+                localStorage.setItem(key, JSON.stringify({ value: value, timestamp: Date.now() }));
+            } catch (e) { /* quota exceeded */ }
+            const keys = [];
+            for (let i = 0; i < localStorage.length; i++) {
+                const k = localStorage.key(i);
+                if (k && k.startsWith('u3d_')) keys.push(k);
+            }
+            if (keys.length > Cache._maxEntries) {
+                keys.sort((a, b) => {
+                    try { return JSON.parse(localStorage.getItem(a)).timestamp - JSON.parse(localStorage.getItem(b)).timestamp; }
+                    catch { return 0; }
+                });
+                for (let i = 0; i < keys.length - Cache._maxEntries; i++) {
+                    localStorage.removeItem(keys[i]);
+                }
+            }
         }
     };
 
@@ -168,11 +184,17 @@
 
         const li = document.createElement('li');
         li.className = 'meta__filmweb';
-        li.innerHTML = `
-            <a href="${fwLink}" class="meta-id-tag" target="_blank" title="Filmweb: ${cleanTitle}">
-                <img src="https://fwcdn.pl/prt/static/images/fw/icons2/512x512.png" class="meta-id-icon" alt="Filmweb">
-            </a>
-        `;
+        const a = document.createElement('a');
+        a.href = fwLink;
+        a.className = 'meta-id-tag';
+        a.target = '_blank';
+        a.title = `Filmweb: ${cleanTitle}`;
+        const img = document.createElement('img');
+        img.src = 'https://fwcdn.pl/prt/static/images/fw/icons2/512x512.png';
+        img.className = 'meta-id-icon';
+        img.alt = 'Filmweb';
+        a.appendChild(img);
+        li.appendChild(a);
         metaList.appendChild(li);
     };
 
@@ -218,7 +240,7 @@
         const apiKey = getOmdbKey();
         GM.xmlHttpRequest({
             method: "GET",
-            url: `http://www.omdbapi.com/?apikey=${apiKey}&tomatoes=true&i=${imdbId}`,
+            url: `https://www.omdbapi.com/?apikey=${apiKey}&tomatoes=true&i=${imdbId}`,
             onload: (res) => {
                 try {
                     const json = JSON.parse(res.responseText);
@@ -271,7 +293,7 @@
 
         GM.xmlHttpRequest({
             method: "GET",
-            url: `http://www.omdbapi.com/?apikey=${apiKey}&tomatoes=true&i=${imdbId}`,
+            url: `https://www.omdbapi.com/?apikey=${apiKey}&tomatoes=true&i=${imdbId}`,
             onload: (res) => {
                 try {
                     const json = JSON.parse(res.responseText);

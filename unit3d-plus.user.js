@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         UNIT3D++
 // @namespace    https://github.com/flowerey/unit3d-scripts
-// @version      1.1.1
+// @version      1.2.0
 // @description  Various QoL improvements for UNIT3D sites
 // @author       blueberry
 // @match        https://*/torrents*
@@ -29,13 +29,19 @@
 
     const TRANSFER_UNITS = ['upload', 'download', 'buffer'];
 
+    const HISTORY_KEY = 'u3d-stats-history';
+    const HISTORY_MAX = 365;
+    const HISTORY_INTERVAL = 6 * 60 * 60 * 1000;
+
     function parseTransferValue(text) {
-        const cleaned = text.replace(/[^0-9.\s]/g, ' ').trim();
+        const cleaned = text.replace(/,/g, '').replace(/[^0-9.\-]/g, ' ').trim();
         const num = parseFloat(cleaned);
         if (isNaN(num)) return 0;
         if (text.includes('TiB')) return num * 1024;
         if (text.includes('GiB')) return num;
         if (text.includes('MiB')) return num / 1024;
+        if (text.includes('KiB')) return num / (1024 * 1024);
+        if (text.includes('B') && !text.includes('iB')) return num / (1024 * 1024 * 1024);
         return num;
     }
 
@@ -48,6 +54,43 @@
             return parseInt(cleaned.replace(/\s/g, ''), 10) || 0;
         }
         return parseFloat(cleaned) || 0;
+    }
+
+    function loadHistory() {
+        try {
+            const stored = JSON.parse(localStorage.getItem(HISTORY_KEY));
+            if (stored && typeof stored === 'object') return stored;
+        } catch (e) { /* ignore */ }
+        return {};
+    }
+
+    function saveHistory(history) {
+        try {
+            const timestamps = Object.keys(history).sort((a, b) => b - a);
+            if (timestamps.length > HISTORY_MAX) {
+                for (const ts of timestamps.slice(HISTORY_MAX)) delete history[ts];
+            }
+            localStorage.setItem(HISTORY_KEY, JSON.stringify(history));
+        } catch (e) { /* ignore */ }
+    }
+
+    function renderSparkline(data, width = 100, height = 20, color = '#2ecc71') {
+        if (!data || data.length < 2) return '';
+        const values = data.map(d => d.value);
+        const min = Math.min(...values);
+        const max = Math.max(...values);
+        const range = max - min || 1;
+        const points = values.map((v, i) => {
+            const x = (i / (values.length - 1)) * width;
+            const y = height - ((v - min) / range) * (height - 4) - 2;
+            return `${x.toFixed(1)},${y.toFixed(1)}`;
+        });
+        const areaPoints = [`0,${height}`, ...points, `${width},${height}`].join(' ');
+        return `<svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" style="vertical-align:middle;">
+            <polygon points="${areaPoints}" fill="${color}" opacity="0.15"/>
+            <polyline points="${points.join(' ')}" fill="none" stroke="${color}" stroke-width="1.5" stroke-linejoin="round"/>
+            <circle cx="${points[points.length - 1].split(',')[0]}" cy="${points[points.length - 1].split(',')[1]}" r="2" fill="${color}"/>
+        </svg>`;
     }
 
     function formatChange(change, name) {
@@ -78,6 +121,11 @@
         const badges = document.querySelectorAll('.badge-user');
         if (badges.length < 7) return;
 
+        const history = loadHistory();
+        const now = Date.now();
+        const lastTs = Object.keys(history).sort((a, b) => b - a)[0];
+        const snapshot = {};
+
         STAT_NAMES.forEach((name, i) => {
             try {
                 const badge = badges[i];
@@ -86,6 +134,8 @@
                 const storedValue = localStorage.getItem(name);
                 const currentValue = badge.textContent;
                 const numValue = parseStatValue(currentValue, name);
+
+                snapshot[name] = numValue;
 
                 if (storedValue !== null) {
                     const prevValue = parseFloat(storedValue);
@@ -104,6 +154,35 @@
                 // Skip this stat on error
             }
         });
+
+        if (!lastTs || (now - parseInt(lastTs)) >= HISTORY_INTERVAL) {
+            history[String(now)] = snapshot;
+            saveHistory(history);
+        }
+
+        const timestamps = Object.keys(history).sort((a, b) => a - b).slice(-30);
+        if (timestamps.length >= 2) {
+            STAT_NAMES.forEach((name, i) => {
+                if (!TRANSFER_UNITS.includes(name)) return;
+                const badge = badges[i];
+                if (!badge || badge.querySelector('svg')) return;
+
+                const chartData = timestamps.map(ts => ({
+                    timestamp: parseInt(ts),
+                    value: history[ts]?.[name] || 0
+                }));
+                const color = getChangeColor(0, name);
+                const svg = renderSparkline(chartData, 100, 20, color);
+                if (svg) {
+                    const container = document.createElement('span');
+                    container.innerHTML = svg;
+                    container.style.cssText = 'margin-left:6px;vertical-align:middle;cursor:help;';
+                    const last5 = chartData.slice(-5);
+                    container.title = `Trend (last ${chartData.length} snapshots)\n${last5.map(d => `${new Date(d.timestamp).toLocaleDateString()}: ${d.value.toFixed(2)} GiB`).join('\n')}`;
+                    badge.appendChild(container);
+                }
+            });
+        }
     }
 
     function randomTorrent() {
@@ -293,8 +372,32 @@
 
     const filter = new TorrentFilter();
 
+    function bustAvatarCache() {
+        const selectors = [
+            '.torrent-info__uploader img',
+            '.user-profile__avatar img',
+            '.torrent-search--list__uploader img',
+            'img[src*="/avatars/"]',
+            'img[src*="/img/avatars/"]',
+            'img.user-avatar'
+        ];
+        const seen = new Set();
+        for (const sel of selectors) {
+            document.querySelectorAll(sel).forEach(img => {
+                const src = img.getAttribute('src');
+                if (!src || seen.has(src) || src.includes('?cb=') || src.startsWith('data:') || src.startsWith('blob:')) return;
+                if (/default|no-avatar|anonymous/i.test(src)) return;
+                if (/\?token=|signature=|expires=/i.test(src)) return;
+                const sep = src.includes('?') ? '&' : '?';
+                img.setAttribute('src', `${src}${sep}cb=${Date.now()}`);
+                seen.add(src);
+            });
+        }
+    }
+
     const runAll = () => {
         statsChange();
+        bustAvatarCache();
         if (/\/torrents\/?$/.test(window.location.pathname)) {
             randomTorrent();
             filter.inject();

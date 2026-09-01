@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         UNIT3D Torrent Highlighter
 // @namespace    https://github.com/flowerey/unit3d-scripts
-// @version      1.3.1
+// @version      1.4.0
 // @description  UNIT3D torrent row highlighting and visual enhancements.
 // @author       blueberry
 // @match        https://*/torrents/*
@@ -24,7 +24,9 @@
             doubleUpload: '#1D343D',
             highSpeed: '#3D1B1D',
             seeding: '#1F2D1F',
-            lowSeeders: '#3D1B1D'
+            lowSeeders: '#3D1B1D',
+            uploaderHighlight: '#2D3A1E',
+            selfUpload: '#1E2D3A'
         },
         minSeeders: 3,
         enableInternal: true,
@@ -33,6 +35,11 @@
         enableHighSpeed: true,
         enableSeeding: true,
         enableLowSeeders: true,
+        enableLanguageFlags: true,
+        enableUploaderHighlight: true,
+        enableSelfUpload: false,
+        highlightedUploaders: [],
+        currentUsername: '',
         throttleMs: 100
     };
 
@@ -53,6 +60,59 @@
     }
 
     let settings = loadSettings();
+
+    const LANGUAGE_FLAGS = {
+        'english': '\u{1F1FA}\u{1F1F8}', 'eng': '\u{1F1FA}\u{1F1F8}',
+        'french': '\u{1F1EB}\u{1F1F7}', 'fre': '\u{1F1EB}\u{1F1F7}', 'fran\u00e7ais': '\u{1F1EB}\u{1F1F7}',
+        'german': '\u{1F1E9}\u{1F1EA}', 'ger': '\u{1F1E9}\u{1F1EA}', 'deutsch': '\u{1F1E9}\u{1F1EA}',
+        'spanish': '\u{1F1EA}\u{1F1F8}', 'spa': '\u{1F1EA}\u{1F1F8}', 'espa\u00f1ol': '\u{1F1EA}\u{1F1F8}',
+        'italian': '\u{1F1EE}\u{1F1F9}', 'ita': '\u{1F1EE}\u{1F1F9}',
+        'portuguese': '\u{1F1E7}\u{1F1F7}', 'por': '\u{1F1E7}\u{1F1F7}',
+        'japanese': '\u{1F1EF}\u{1F1F5}', 'jpn': '\u{1F1EF}\u{1F1F5}',
+        'korean': '\u{1F1F0}\u{1F1F7}', 'kor': '\u{1F1F0}\u{1F1F7}',
+        'chinese': '\u{1F1E8}\u{1F1F3}', 'chi': '\u{1F1E8}\u{1F1F3}', 'zho': '\u{1F1E8}\u{1F1F3}',
+        'russian': '\u{1F1F7}\u{1F1FA}', 'rus': '\u{1F1F7}\u{1F1FA}',
+        'dutch': '\u{1F1F3}\u{1F1F1}', 'dut': '\u{1F1F3}\u{1F1F1}', 'nld': '\u{1F1F3}\u{1F1F1}',
+        'swedish': '\u{1F1F8}\u{1F1EA}', 'swe': '\u{1F1F8}\u{1F1EA}',
+        'turkish': '\u{1F1F9}\u{1F1F7}', 'tur': '\u{1F1F9}\u{1F1F7}',
+        'polish': '\u{1F1F5}\u{1F1F1}', 'pol': '\u{1F1F5}\u{1F1F1}',
+        'czech': '\u{1F1E8}\u{1F1FF}', 'cze': '\u{1F1E8}\u{1F1FF}', 'ces': '\u{1F1E8}\u{1F1FF}',
+        'danish': '\u{1F1E9}\u{1F1F0}', 'dan': '\u{1F1E9}\u{1F1F0}',
+        'finnish': '\u{1F1EB}\u{1F1EE}', 'fin': '\u{1F1EB}\u{1F1EE}',
+        'norwegian': '\u{1F1F3}\u{1F1F4}', 'nor': '\u{1F1F3}\u{1F1F4}',
+        'hungarian': '\u{1F1ED}\u{1F1FA}', 'hun': '\u{1F1ED}\u{1F1FA}',
+        'romanian': '\u{1F1F7}\u{1F1F4}', 'rum': '\u{1F1F7}\u{1F1F4}',
+        'greek': '\u{1F1EC}\u{1F1F7}', 'gre': '\u{1F1EC}\u{1F1F7}',
+        'arabic': '\u{1F1F8}\u{1F1E6}', 'ara': '\u{1F1F8}\u{1F1E6}',
+        'hindi': '\u{1F1EE}\u{1F1F3}', 'hin': '\u{1F1EE}\u{1F1F3}',
+        'thai': '\u{1F1F9}\u{1F1ED}', 'tha': '\u{1F1F9}\u{1F1ED}',
+        'vietnamese': '\u{1F1FB}\u{1F1F3}', 'vie': '\u{1F1FB}\u{1F1F3}',
+        'indonesian': '\u{1F1EE}\u{1F1E9}', 'ind': '\u{1F1EE}\u{1F1E9}',
+        'multi': '\u{1F310}', 'undetermined': '\u2753'
+    };
+
+    function getFlagForLanguage(lang) {
+        if (!lang || !settings.enableLanguageFlags) return null;
+        const lower = lang.toLowerCase().trim();
+        if (LANGUAGE_FLAGS[lower]) return LANGUAGE_FLAGS[lower];
+        if (/[\u{1F1E0}-\u{1F1FF}]{2}/u.test(lang)) return lang;
+        for (const [key, flag] of Object.entries(LANGUAGE_FLAGS)) {
+            if (lower.includes(key)) return flag;
+        }
+        return null;
+    }
+
+    function getUploaderName(row) {
+        const uploaderLink = row.querySelector(
+            '.torrent-info__uploader a, .torrent-search--list__uploader a, a[href*="/users/"]'
+        );
+        if (uploaderLink) {
+            const match = uploaderLink.href.match(/\/users\/([^/]+)/);
+            if (match) return decodeURIComponent(match[1]);
+            return uploaderLink.textContent.trim();
+        }
+        return null;
+    }
 
     const CSS = `
         .unit3d-name-badge {
@@ -222,6 +282,8 @@
                 this.handleTrump(row);
                 this.animateIcons(row);
                 this.handleLowSeeders(row);
+                this.handleLanguageFlags(row);
+                this.handleUploaderHighlight(row);
             });
         }
 
@@ -315,6 +377,68 @@
             }
         }
 
+        handleLanguageFlags(row) {
+            if (!settings.enableLanguageFlags) return;
+            if (row.dataset.langFlagAdded) return;
+
+            let langEl = row.querySelector('.torrent-info__language span[title]');
+            if (!langEl) langEl = row.querySelector('.torrent-icons img[title], .torrent-icons i[title]');
+            if (!langEl) langEl = row.querySelector('[title*="Language"], [title*="lang"]');
+            if (!langEl) { row.dataset.langFlagAdded = "true"; return; }
+
+            const langText = langEl.getAttribute('title') || langEl.textContent || '';
+            const firstLang = langText.split('/')[0].split('|')[0].trim();
+            const flag = getFlagForLanguage(firstLang);
+            if (!flag) { row.dataset.langFlagAdded = "true"; return; }
+
+            const nameEl = row.querySelector('.torrent-search--list__name, .torrent-search--grouped__name a');
+            const flagSpan = document.createElement('span');
+            flagSpan.textContent = ` ${flag}`;
+            flagSpan.style.cssText = 'font-size:14px; vertical-align:middle; margin-left:4px;';
+            flagSpan.title = firstLang;
+            if (nameEl) nameEl.parentNode.insertBefore(flagSpan, nameEl.nextSibling);
+            row.dataset.langFlagAdded = "true";
+        }
+
+        handleUploaderHighlight(row) {
+            if (!settings.enableUploaderHighlight && !settings.enableSelfUpload) return;
+            if (row.dataset.uploaderChecked) return;
+
+            const uploader = getUploaderName(row);
+            if (!uploader) { row.dataset.uploaderChecked = "true"; return; }
+
+            let color = null;
+            let tooltip = null;
+
+            if (settings.enableSelfUpload && settings.currentUsername &&
+                uploader.toLowerCase() === settings.currentUsername.toLowerCase()) {
+                color = settings.colors.selfUpload;
+                tooltip = 'Your upload';
+            } else if (settings.enableUploaderHighlight) {
+                const match = settings.highlightedUploaders.find(
+                    u => u.toLowerCase() === uploader.toLowerCase()
+                );
+                if (match) {
+                    color = settings.colors.uploaderHighlight;
+                    tooltip = `Highlighted uploader: ${match}`;
+                }
+            }
+
+            if (color) {
+                const nameEl = row.querySelector('.torrent-search--list__name, .torrent-search--grouped__name a');
+                if (nameEl) {
+                    if (nameEl.classList.contains('unit3d-name-badge')) {
+                        nameEl.style.borderLeft = `4px solid ${color}`;
+                    } else {
+                        nameEl.classList.add('unit3d-name-badge');
+                        nameEl.style.backgroundColor = color;
+                    }
+                    nameEl.title = tooltip;
+                }
+            }
+            row.dataset.uploaderChecked = "true";
+        }
+
         injectSettingsButton() {
             if (document.getElementById('unit3d-hl-settings-btn')) return;
 
@@ -344,7 +468,9 @@
                 { key: 'doubleUpload', label: 'Double Upload' },
                 { key: 'highSpeed', label: 'High Speed' },
                 { key: 'seeding', label: 'Seeding' },
-                { key: 'lowSeeders', label: 'Low Seeders' }
+                { key: 'lowSeeders', label: 'Low Seeders' },
+                { key: 'uploaderHighlight', label: 'Uploader Highlight' },
+                { key: 'selfUpload', label: 'Self Upload' }
             ];
 
             const toggleKeys = [
@@ -353,7 +479,10 @@
                 { key: 'enableDoubleUpload', label: 'Double Upload highlight' },
                 { key: 'enableHighSpeed', label: 'High Speed highlight' },
                 { key: 'enableSeeding', label: 'Seeding highlight' },
-                { key: 'enableLowSeeders', label: 'Low seeder warning' }
+                { key: 'enableLowSeeders', label: 'Low seeder warning' },
+                { key: 'enableLanguageFlags', label: 'Language flags' },
+                { key: 'enableUploaderHighlight', label: 'Uploader highlight' },
+                { key: 'enableSelfUpload', label: 'Highlight my uploads' }
             ];
 
             panel.innerHTML = `
@@ -367,6 +496,18 @@
                 <div class="unit3d-settings-row">
                     <label>Min Seeders (warn below)</label>
                     <input type="number" id="unit3d-min-seeders" value="${settings.minSeeders}" min="0" max="50">
+                </div>
+                <div class="unit3d-settings-row">
+                    <label>My Username</label>
+                    <input type="text" id="unit3d-username" value="${settings.currentUsername}" placeholder="Your username..." style="width:120px;padding:4px 8px;border:1px solid #444;border-radius:4px;background:#111;color:#ddd;font-size:12px;">
+                </div>
+                <div style="margin-bottom:10px;">
+                    <label style="font-size:13px;">Highlighted Uploaders</label>
+                    <div id="unit3d-uploader-tags" style="margin-top:4px;">${settings.highlightedUploaders.map(u => `<span style="display:inline-flex;align-items:center;gap:4px;padding:2px 6px;margin:2px;background:#333;border-radius:3px;font-size:11px;">${u}<button class="unit3d-rm-uploader" data-user="${u}" style="background:none;color:#f66;border:none;cursor:pointer;font-size:10px;">\u00d7</button></span>`).join('')}</div>
+                    <div style="display:flex;gap:4px;margin-top:4px;">
+                        <input type="text" id="unit3d-uploader-input" placeholder="Add username..." style="flex:1;padding:4px 8px;border:1px solid #444;border-radius:4px;background:#111;color:#ddd;font-size:12px;">
+                        <button id="unit3d-uploader-add" style="padding:4px 8px;background:#2ecc71;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:11px;">Add</button>
+                    </div>
                 </div>
                 <hr style="border-color:#333; margin: 12px 0;">
                 ${toggleKeys.map(t => `
@@ -392,10 +533,18 @@
                 const minInput = panel.querySelector('#unit3d-min-seeders');
                 if (minInput) settings.minSeeders = parseInt(minInput.value, 10) || 0;
 
+                const usernameInput = panel.querySelector('#unit3d-username');
+                if (usernameInput) settings.currentUsername = usernameInput.value.trim();
+
+                const uploaderTags = panel.querySelectorAll('#unit3d-uploader-tags span');
+                settings.highlightedUploaders = Array.from(uploaderTags).map(el => el.textContent.replace('\u00d7', '').trim());
+
                 saveSettings(settings);
 
-                document.querySelectorAll('tr[data-hi-checked]').forEach(row => {
+                document.querySelectorAll('tr[data-hi-checked], tr[data-uploader-checked], tr[data-lang-flag-added]').forEach(row => {
                     delete row.dataset.hiChecked;
+                    delete row.dataset.uploaderChecked;
+                    delete row.dataset.langFlagAdded;
                     const nameEl = row.querySelector('.unit3d-name-badge');
                     if (nameEl) {
                         nameEl.classList.remove('unit3d-name-badge');
@@ -409,6 +558,23 @@
 
             overlay.appendChild(panel);
             document.body.appendChild(overlay);
+
+            panel.querySelector('#unit3d-uploader-add').onclick = () => {
+                const input = panel.querySelector('#unit3d-uploader-input');
+                const val = input.value.trim();
+                if (val) {
+                    const tags = panel.querySelector('#unit3d-uploader-tags');
+                    const span = document.createElement('span');
+                    span.style.cssText = 'display:inline-flex;align-items:center;gap:4px;padding:2px 6px;margin:2px;background:#333;border-radius:3px;font-size:11px;';
+                    span.innerHTML = `${val}<button class="unit3d-rm-uploader" data-user="${val}" style="background:none;color:#f66;border:none;cursor:pointer;font-size:10px;">\u00d7</button>`;
+                    tags.appendChild(span);
+                    span.querySelector('.unit3d-rm-uploader').onclick = () => span.remove();
+                    input.value = '';
+                }
+            };
+            panel.querySelectorAll('.unit3d-rm-uploader').forEach(btn => {
+                btn.onclick = () => btn.closest('span').remove();
+            });
         }
     }
 

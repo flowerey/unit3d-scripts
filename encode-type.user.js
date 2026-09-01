@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         UNIT3D Encode Type
 // @namespace    https://github.com/flowerey/unit3d-scripts
-// @version      2.2.1
+// @version      2.3.0
 // @description  Adds encode analysis, compatibility checks, and quality indicators to mediainfo.
 // @author       blueberry
 // @match        https://*/torrents/*
@@ -334,9 +334,20 @@
     function is_dxva() {
         if (state.dxvaOpFailed.length > 0) return false;
 
-        if (state.videoFormat != "AVC" || state.videoBits > 8) {
-            state.dxvaOpFailed.push("Must be AVC 8bit");
+        if (state.videoFormat === "AVC" && state.videoBits > 8) {
+            state.dxvaOpFailed.push("AVC > 8-bit not universally HW-decodable");
             return false;
+        }
+        if (state.videoFormat === "HEVC" && state.videoBits > 10) {
+            state.dxvaOpFailed.push("HEVC > 10-bit not universally HW-decodable");
+            return false;
+        }
+        if (state.videoFormat === "AVC" && state.videoBits <= 8) {
+            // AVC 8-bit: full DXVA2 support, continue with ref/analyse checks
+        } else if (state.videoFormat !== "AVC") {
+            // AV1/VP9/VP8: hardware decode generally available on modern GPUs
+            // Skip AVC-specific ref/analyse checks
+            return state.dxvaOpFailed.length == 0;
         }
 
         const pixels = state.videoHeight * state.videoWidth;
@@ -387,8 +398,8 @@
         switch (state.videoResolution) {
             case "1080p":
             case "720p":
-                if (state.videoFormat != "AVC") {
-                    state.streamOpFailed.push("Must use x264");
+                if (state.videoFormat != "AVC" && state.videoFormat != "AV1" && state.videoFormat != "VP9") {
+                    state.streamOpFailed.push("Must use x264, AV1, or VP9");
                 }
                 if (!(state.videoSettings.me == "umh" || state.videoSettings.me == "esa" || state.videoSettings.me == "tesa")) {
                     state.streamOpFailed.push(`me = ${state.videoSettings.me} < "umh"`);
@@ -410,8 +421,8 @@
                 }
                 break;
             case "2160p":
-                if (state.videoFormat != "HEVC") {
-                    state.streamOpFailed.push("Must use x265");
+                if (state.videoFormat != "HEVC" && state.videoFormat != "AV1") {
+                    state.streamOpFailed.push("Must use x265 or AV1");
                 }
                 if (!state.videoHdrFormat.includes("HDR10")) {
                     state.streamOpFailed.push('Must be HDR10 or HLG');
@@ -606,6 +617,28 @@
                 addResult("Compat", "HEVC HW decode", "pass", "Compatible", "Hardware decode supported");
             } else {
                 addResult("Compat", "HEVC HW decode", "warn", "Issues", issues.join("; "));
+            }
+        }
+
+        // AV1 hardware decode
+        if (state.videoFormat === "AV1") {
+            const bits = state.videoBits;
+            const issues = [];
+            if (bits > 10) issues.push(`${bits}-bit AV1 may not be HW-decodable on all devices`);
+            if (issues.length === 0) {
+                addResult("Compat", "AV1 HW decode", "pass", "Compatible", "Supported on Turing+/RDNA+/Tiger Lake+");
+            } else {
+                addResult("Compat", "AV1 HW decode", "warn", "Issues", issues.join("; "));
+            }
+        }
+
+        // VP9 hardware decode
+        if (state.videoFormat === "VP9") {
+            const bits = state.videoBits;
+            if (bits > 10) {
+                addResult("Compat", "VP9 HW decode", "warn", `${bits}-bit`, "VP9 > 10-bit not HW-decodable");
+            } else {
+                addResult("Compat", "VP9 HW decode", "pass", "Compatible", "Widely supported since Maxwell/Polaris");
             }
         }
 
@@ -1258,12 +1291,24 @@
         state.videoSection = getMediainfoVideo();
         if (!state.videoSection) return;
 
+        const FORMAT_PREFIXES = [
+            { prefix: 'AVC', format: 'AVC' },
+            { prefix: 'HEVC', format: 'HEVC' },
+            { prefix: 'AV01', format: 'AV1' },
+            { prefix: 'AV1', format: 'AV1' },
+            { prefix: 'VP9', format: 'VP9' },
+            { prefix: 'VP8', format: 'VP8' },
+            { prefix: 'MPEG-4', format: 'AVC' }
+        ];
+
         const videoDD = state.videoSection.getElementsByTagName("dd");
         for (const dd of videoDD) {
             const text = dd.innerHTML.trim();
-            if (text.startsWith("AVC") || text.startsWith("HEVC")) {
-                state.videoFormat = text.startsWith("AVC") ? "AVC" : "HEVC";
-                state.videoBits = dd.innerHTML.includes("8 bits", 0) ? 8 : 10;
+            const match = FORMAT_PREFIXES.find(f => text.startsWith(f.prefix));
+            if (match) {
+                state.videoFormat = match.format;
+                const bitsMatch = dd.innerHTML.match(/(\d+)\s*bits/);
+                state.videoBits = bitsMatch ? parseInt(bitsMatch[1], 10) : 8;
                 dd.innerHTML = `${dd.innerHTML} - ${get_enc_type()}`;
                 return;
             }

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         UNIT3D Keybinds
 // @namespace    https://github.com/flowerey/unit3d-scripts
-// @version      1.4.1
+// @version      1.5.0
 // @description  Adds keybinds to UNIT3D.
 // @author       blueberry
 // @match        https://*/torrents*
@@ -17,25 +17,35 @@
     const STORAGE_KEY = 'unit3d-keybinds-map';
 
     const DEFAULT_BINDS = {
-        imdb: 's',
-        letterboxd: 'l',
-        tmdb: 'm',
-        bluray: 'x',
-        nzbgeek: 'd',
-        trailer: 't',
-        edit: 'e',
-        back: 'b',
-        listNext: 'j',
-        listPrev: 'k',
-        listOpen: 'Enter',
-        search: '/',
-        help: '?'
+        imdb:          { key: 's', ctrl: false, shift: false, alt: false },
+        letterboxd:    { key: 'l', ctrl: false, shift: false, alt: false },
+        tmdb:          { key: 'm', ctrl: false, shift: false, alt: false },
+        bluray:        { key: 'x', ctrl: false, shift: false, alt: false },
+        nzbgeek:       { key: 'd', ctrl: false, shift: false, alt: false },
+        trailer:       { key: 't', ctrl: false, shift: false, alt: false },
+        edit:          { key: 'e', ctrl: false, shift: false, alt: false },
+        back:          { key: 'b', ctrl: false, shift: false, alt: false },
+        listNext:      { key: 'j', ctrl: false, shift: false, alt: false },
+        listPrev:      { key: 'k', ctrl: false, shift: false, alt: false },
+        listOpen:      { key: 'Enter', ctrl: false, shift: false, alt: false },
+        search:        { key: '/', ctrl: false, shift: false, alt: false },
+        help:          { key: '?', ctrl: false, shift: false, alt: false }
     };
 
     function loadBinds() {
         try {
             const stored = JSON.parse(localStorage.getItem(STORAGE_KEY));
-            if (stored && typeof stored === 'object') return { ...DEFAULT_BINDS, ...stored };
+            if (stored && typeof stored === 'object') {
+                const merged = { ...DEFAULT_BINDS };
+                for (const [action, value] of Object.entries(stored)) {
+                    if (typeof value === 'string') {
+                        merged[action] = { key: value, ctrl: false, shift: false, alt: false };
+                    } else if (typeof value === 'object' && value.key) {
+                        merged[action] = { ...DEFAULT_BINDS[action], ...value };
+                    }
+                }
+                return merged;
+            }
         } catch (e) { /* ignore */ }
         return { ...DEFAULT_BINDS };
     }
@@ -123,7 +133,16 @@
 
             const isListPage = /\/torrents\/?$/.test(window.location.pathname);
 
-            const fmt = (key) => key === ' ' ? 'Space' : key === 'Enter' ? 'Enter' : key.length === 1 ? key.toUpperCase() : key;
+            const fmt = (bind) => {
+                if (typeof bind === 'string') return bind === ' ' ? 'Space' : bind === 'Enter' ? 'Enter' : bind.length === 1 ? bind.toUpperCase() : bind;
+                const parts = [];
+                if (bind.ctrl) parts.push('Ctrl');
+                if (bind.shift) parts.push('Shift');
+                if (bind.alt) parts.push('Alt');
+                const k = bind.key === ' ' ? 'Space' : bind.key.length === 1 ? bind.key.toUpperCase() : bind.key;
+                parts.push(k);
+                return parts.join('+');
+            };
 
             const detailBinds = [
                 { key: binds.imdb, desc: 'Open IMDb' },
@@ -217,12 +236,19 @@
 
             panel.innerHTML = `
                 <h3 style="margin:0 0 12px 0;color:#fff;border-bottom:1px solid #333;padding-bottom:8px;font-size:14px;">Customize Keybinds</h3>
-                ${fields.map(f => `
+                ${fields.map(f => {
+                    const bind = binds[f.key] || { key: '', ctrl: false, shift: false, alt: false };
+                    return `
                     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
-                        <label style="font-size:12px;color:#aaa;">${f.label}</label>
-                        <input type="text" data-bind="${f.key}" value="${binds[f.key]}" style="width:60px;padding:4px 8px;border:1px solid #444;border-radius:4px;background:#111;color:#ddd;font-size:12px;text-align:center;">
-                    </div>
-                `).join('')}
+                        <label style="font-size:12px;color:#aaa;min-width:100px;">${f.label}</label>
+                        <div style="display:flex;align-items:center;gap:4px;">
+                            <label style="font-size:10px;color:#666;"><input type="checkbox" data-mod="${f.key}-ctrl" ${bind.ctrl ? 'checked' : ''}> Ctrl</label>
+                            <label style="font-size:10px;color:#666;"><input type="checkbox" data-mod="${f.key}-shift" ${bind.shift ? 'checked' : ''}> Shift</label>
+                            <label style="font-size:10px;color:#666;"><input type="checkbox" data-mod="${f.key}-alt" ${bind.alt ? 'checked' : ''}> Alt</label>
+                            <input type="text" data-bind="${f.key}" value="${bind.key}" style="width:60px;padding:4px 8px;border:1px solid #444;border-radius:4px;background:#111;color:#ddd;font-size:12px;text-align:center;">
+                        </div>
+                    </div>`;
+                }).join('')}
                 <div style="display:flex;gap:8px;margin-top:12px;">
                     <button class="kb-save-btn" style="flex:1;padding:8px;background:#2ecc71;color:#fff;border:none;border-radius:4px;font-weight:bold;cursor:pointer;">Save</button>
                     <button class="kb-reset-btn" style="flex:1;padding:8px;background:#555;color:#fff;border:none;border-radius:4px;cursor:pointer;">Reset</button>
@@ -232,7 +258,13 @@
             panel.querySelector('.kb-save-btn').onclick = () => {
                 const newBinds = { ...binds };
                 panel.querySelectorAll('[data-bind]').forEach(input => {
-                    newBinds[input.dataset.bind] = input.value.trim() || binds[input.dataset.bind];
+                    const actionKey = input.dataset.bind;
+                    newBinds[actionKey] = {
+                        key: input.value.trim() || binds[actionKey].key,
+                        ctrl: !!panel.querySelector(`[data-mod="${actionKey}-ctrl"]`)?.checked,
+                        shift: !!panel.querySelector(`[data-mod="${actionKey}-shift"]`)?.checked,
+                        alt: !!panel.querySelector(`[data-mod="${actionKey}-alt"]`)?.checked,
+                    };
                 });
                 saveBinds(newBinds);
                 overlay.remove();
@@ -241,7 +273,15 @@
 
             panel.querySelector('.kb-reset-btn').onclick = () => {
                 panel.querySelectorAll('[data-bind]').forEach(input => {
-                    input.value = DEFAULT_BINDS[input.dataset.bind];
+                    const actionKey = input.dataset.bind;
+                    const def = DEFAULT_BINDS[actionKey];
+                    input.value = def.key;
+                    const ctrlCb = panel.querySelector(`[data-mod="${actionKey}-ctrl"]`);
+                    const shiftCb = panel.querySelector(`[data-mod="${actionKey}-shift"]`);
+                    const altCb = panel.querySelector(`[data-mod="${actionKey}-alt"]`);
+                    if (ctrlCb) ctrlCb.checked = def.ctrl;
+                    if (shiftCb) shiftCb.checked = def.shift;
+                    if (altCb) altCb.checked = def.alt;
                 });
             };
 
@@ -331,6 +371,17 @@
             const isListPage = /\/torrents\/?$/.test(window.location.pathname);
             const b = this.binds;
 
+            const matchesBind = (bindDef, pressedKey) => {
+                if (!bindDef || typeof bindDef !== 'object') return false;
+                const keyMatch = bindDef.key.length === 1
+                    ? pressedKey.toLowerCase() === bindDef.key.toLowerCase()
+                    : pressedKey === bindDef.key;
+                return keyMatch &&
+                    !!e.ctrlKey === !!bindDef.ctrl &&
+                    !!e.shiftKey === !!bindDef.shift &&
+                    !!e.altKey === !!bindDef.alt;
+            };
+
             if (key === 'Escape') {
                 if (UI.helpOverlay) {
                     e.preventDefault();
@@ -344,7 +395,7 @@
                 }
             }
 
-            if (key === b.help) {
+            if (matchesBind(b.help, key)) {
                 e.preventDefault();
                 UI.toggleHelp(b);
                 return;
@@ -354,25 +405,25 @@
                 const rows = this.getVisibleRows();
                 if (rows.length === 0) return;
 
-                if (keyLower === b.listNext) {
+                if (matchesBind(b.listNext, key)) {
                     e.preventDefault();
                     const next = Math.min(this.selectedIndex + 1, rows.length - 1);
                     this.highlightRow(next);
                     return;
                 }
-                if (keyLower === b.listPrev) {
+                if (matchesBind(b.listPrev, key)) {
                     e.preventDefault();
                     const prev = Math.max(this.selectedIndex - 1, 0);
                     this.highlightRow(prev);
                     return;
                 }
-                if (key === b.listOpen && this.selectedIndex >= 0) {
+                if (matchesBind(b.listOpen, key) && this.selectedIndex >= 0) {
                     e.preventDefault();
                     const link = rows[this.selectedIndex].querySelector('a[href*="/torrents/"]');
                     if (link) window.location.href = link.href;
                     return;
                 }
-                if (key === b.search) {
+                if (matchesBind(b.search, key)) {
                     e.preventDefault();
                     const searchInput = document.querySelector('input[type="search"], input[name="search"], input.form-control');
                     if (searchInput) searchInput.focus();
@@ -391,23 +442,26 @@
                     bluray: this.getLink('.meta__blu-ray')
                 };
 
-                const actions = {};
-                actions[b.imdb] = () => links.imdb ? window.open(links.imdb, '_blank') : UI.showToast('IMDb link not found');
-                actions[b.letterboxd] = () => links.letterboxd ? window.open(links.letterboxd, '_blank') : UI.showToast('Letterboxd link not found');
-                actions[b.tmdb] = () => links.tmdb ? window.open(links.tmdb, '_blank') : UI.showToast('TMDB link not found');
-                actions[b.bluray] = () => links.bluray ? window.open(links.bluray, '_blank') : UI.showToast('Blu-ray.com link not found');
-                actions[b.nzbgeek] = () => window.open(`https://nzbgeek.info/geekseek.php?browseincludewords=${query}`, '_blank');
-                actions[b.trailer] = () => window.open(`https://www.youtube.com/results?search_query=${query}+trailer`, '_blank');
-                actions[b.edit] = () => {
-                    const path = window.location.pathname.replace(/\/$/, '');
-                    window.location.href = `${window.location.origin}${path}/edit`;
+                const actionMap = {
+                    imdb: () => links.imdb ? window.open(links.imdb, '_blank') : UI.showToast('IMDb link not found'),
+                    letterboxd: () => links.letterboxd ? window.open(links.letterboxd, '_blank') : UI.showToast('Letterboxd link not found'),
+                    tmdb: () => links.tmdb ? window.open(links.tmdb, '_blank') : UI.showToast('TMDB link not found'),
+                    bluray: () => links.bluray ? window.open(links.bluray, '_blank') : UI.showToast('Blu-ray.com link not found'),
+                    nzbgeek: () => window.open(`https://nzbgeek.info/geekseek.php?browseincludewords=${query}`, '_blank'),
+                    trailer: () => window.open(`https://www.youtube.com/results?search_query=${query}+trailer`, '_blank'),
+                    edit: () => {
+                        const path = window.location.pathname.replace(/\/$/, '');
+                        window.location.href = `${window.location.origin}${path}/edit`;
+                    },
+                    back: () => window.location.href = `${window.location.origin}/torrents`
                 };
-                actions[b.back] = () => window.location.href = `${window.location.origin}/torrents`;
 
-                const action = actions[keyLower] || actions[key];
-                if (action) {
-                    e.preventDefault();
-                    action();
+                for (const [actionName, actionFn] of Object.entries(actionMap)) {
+                    if (matchesBind(b[actionName], key)) {
+                        e.preventDefault();
+                        actionFn();
+                        return;
+                    }
                 }
             }
         }

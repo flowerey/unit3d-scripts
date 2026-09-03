@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         UNIT3D Keybinds
 // @namespace    https://github.com/flowerey/unit3d-scripts
-// @version      1.5.0
+// @version      1.5.1
 // @description  Adds keybinds to UNIT3D.
 // @author       blueberry
 // @match        https://*/torrents*

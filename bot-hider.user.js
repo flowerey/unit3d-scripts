@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         UNIT3D Bot Hider
 // @namespace    https://github.com/flowerey/unit3d-scripts
-// @version      1.3.2
+// @version      1.3.3
 // @description  Toggles the visibility of bot messages on UNIT3D chatbox.
 // @author       blueberry
 // @match        https://*/chatbox*

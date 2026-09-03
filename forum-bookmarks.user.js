@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         UNIT3D Forum Bookmarks
 // @namespace    https://github.com/flowerey/unit3d-scripts
-// @version      1.0.1
+// @version      1.0.2
 // @description  Bookmark and manage forum posts on UNIT3D sites
 // @author       blueberry
 // @match        https://*/forums/*

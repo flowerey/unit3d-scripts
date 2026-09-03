@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         UNIT3D++
 // @namespace    https://github.com/flowerey/unit3d-scripts
-// @version      1.2.1
+// @version      1.2.2
 // @description  Various QoL improvements for UNIT3D sites
 // @author       blueberry
 // @match        https://*/torrents*

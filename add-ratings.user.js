@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         UNIT3D Add Letterboxd/IMDB/RT/TMDB rating
 // @namespace    https://github.com/flowerey/unit3d-scripts
-// @version      1.5.2
+// @version      1.5.3
 // @description  Add Ratings to Letterboxd/IMDB/RT/TMDB.
 // @author       blueberry
 // @match        https://*/torrents/*

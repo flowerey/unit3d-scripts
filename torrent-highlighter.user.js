@@ -257,7 +257,6 @@
             this.process();
             this.setupObserver();
             this.injectSettingsButton();
-            window.addEventListener('turbolinks:load', () => this.process());
         }
 
         setupObserver() {
@@ -599,5 +598,4 @@
     } else {
         start();
     }
-    window.addEventListener('turbolinks:load', start);
 })();

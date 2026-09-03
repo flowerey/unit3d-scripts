@@ -6554,7 +6554,61 @@ body.host-panel-dragging * {
             console.debug("cacheChatContext: starting cache refresh");
         }
 
-        // Try oldtoons (#chatbody[x-data]) first
+        // Extract the logged-in user's id + chatroom from the chatbox Alpine root.
+        //   * Legacy (pre-v8): x-data="chatbox(JSON.parse('{...}'))"
+        //   * UNIT3D v8+     : x-data="chatbox({...})" (Alpine data resolved via `@js($user)`)
+        // The embedded JSON is JS-escaped (\u0022, \x7B, \/, \\, etc.), so decode those
+        // escapes before calling JSON.parse — mirroring how the JS string literal is read.
+        const extractUserJson = (raw) => {
+            if (!raw) return null;
+
+            let jsonContent = null;
+
+            // Legacy form: JSON.parse('{...}')
+            const legacy = raw.match(/JSON\.parse\((['"])([\s\S]*?)\1\)/);
+            if (legacy) {
+                jsonContent = legacy[2];
+            } else {
+                // New form: chatbox({...}) — pull the balanced JSON object literal.
+                const start = raw.indexOf('{');
+                if (start === -1) return null;
+                let depth = 0;
+                let end = -1;
+                for (let i = start; i < raw.length; i++) {
+                    const ch = raw[i];
+                    if (ch === '{') depth++;
+                    else if (ch === '}') {
+                        depth--;
+                        if (depth === 0) {
+                            end = i;
+                            break;
+                        }
+                    }
+                }
+                if (end === -1) return null;
+                jsonContent = raw.slice(start, end + 1);
+            }
+
+            // Decode JS string-literal escapes in a single pass so that \\ is consumed
+            // before \uNNNN — matching how JavaScript parses string literals.
+            jsonContent = jsonContent.replace(
+                /\\(u[0-9A-Fa-f]{4}|x[0-9A-Fa-f]{2}|\\|'|\/|n|r|t|b|f)/g,
+                (_, esc) => {
+                    if (esc[0] === 'u') return String.fromCharCode(parseInt(esc.slice(1), 16));
+                    if (esc[0] === 'x') return String.fromCharCode(parseInt(esc.slice(1), 16));
+                    const simple = { '\\': '\\', "'": "'", '/': '/', 'n': '\n', 'r': '\r', 't': '\t', 'b': '\b', 'f': '\f' };
+                    return simple[esc] || esc;
+                }
+            );
+
+            try {
+                return JSON.parse(jsonContent);
+            } catch (e) {
+                return null;
+            }
+        };
+
+        // Try chatbody (#chatbody[x-data]) first
         const section = document.querySelector('section#chatbody[x-data]');
         if (section) {
             try {
@@ -6562,41 +6616,12 @@ body.host-panel-dragging * {
                 if (DEBUG_SETTINGS.verify_cacheChatContext) {
                     console.debug("cacheChatContext: found x-data attribute:", raw);
                 }
-                // Extract the substring 'JSON.parse(...)' from raw
-                const jsonParseMatch = raw.match(/JSON\.parse\((['"])([\s\S]*?)\1\)/);
-                if (jsonParseMatch) {
-                    let jsonContent = jsonParseMatch[2]; // the JSON string inside the quotes
-                    if (DEBUG_SETTINGS.verify_cacheChatContext) {
-                        console.debug("cacheChatContext: extracted JSON content:", jsonContent);
-                    }
-                    try {
-                        // The x-data attribute contains JavaScript-escaped strings (\x7B, \x22, \\, \/, etc.)
-                        // that JSON.parse can't handle directly. Decode JS escapes in a single pass so that
-                        // \\ is consumed before \uNNNN — matching how JS string literal parsing works.
-                        jsonContent = jsonContent.replace(
-                            /\\(u[0-9A-Fa-f]{4}|x[0-9A-Fa-f]{2}|\\|'|\/|n|r|t|b|f)/g,
-                            (_, esc) => {
-                                if (esc[0] === 'u') return String.fromCharCode(parseInt(esc.slice(1), 16));
-                                if (esc[0] === 'x') return String.fromCharCode(parseInt(esc.slice(1), 16));
-                                const simple = { '\\': '\\', "'": "'", '/': '/', 'n': '\n', 'r': '\r', 't': '\t', 'b': '\b', 'f': '\f' };
-                                return simple[esc] || esc;
-                            }
-                        );
-
-                        const jsonData = JSON.parse(jsonContent);
-                        if (jsonData) {
-                            OT_USER_ID = Number(jsonData.id);
-                            OT_CHATROOM_ID = Number(jsonData.chatroom_id);
-                        }
-                    } catch (e) {
-                        if (DEBUG_SETTINGS.verify_cacheChatContext) {
-                            console.debug("cacheChatContext: error parsing JSON content", e);
-                        }
-                    }
-                } else {
-                    if (DEBUG_SETTINGS.verify_cacheChatContext) {
-                        console.debug("cacheChatContext: JSON.parse(...) pattern not found in x-data");
-                    }
+                const jsonData = extractUserJson(raw);
+                if (jsonData) {
+                    OT_USER_ID = Number(jsonData.id);
+                    OT_CHATROOM_ID = Number(jsonData.chatroom_id);
+                } else if (DEBUG_SETTINGS.verify_cacheChatContext) {
+                    console.debug("cacheChatContext: could not parse user JSON from x-data");
                 }
             } catch (e) {
                 if (DEBUG_SETTINGS.verify_cacheChatContext) {
@@ -7837,12 +7862,14 @@ body.host-panel-dragging * {
     }
 
     // ───────────────────────────────────────────────────────────
-    // SECTION 12: SPA / Turbolinks Navigation Support
+    // SECTION 12: Cross-Page / Navigation Support
     // ───────────────────────────────────────────────────────────
-    // When the user navigates to another page on the same site via turbolinks,
-    // re-inject the giveaway UI so entries and commands keep working cross-page.
-    window.addEventListener('turbolinks:load', () => {
-        // Re-inject the giveaway button and frame if they were removed during navigation
+    // UNIT3D no longer uses Turbolinks (it was removed in v8; navigation is now
+    // standard full-page loads, so the script re-inits on every page anyway).
+    // Re-run the cache/injection on `pageshow` with `persisted` to recover the
+    // giveaway UI when the browser restores the page from bfcache.
+    window.addEventListener('pageshow', (event) => {
+        if (!event.persisted) return;
         const existingFrame = document.getElementById('giveawayFrame');
         if (!existingFrame && document.querySelector('#chatbox_header div')) {
             injectMenu();

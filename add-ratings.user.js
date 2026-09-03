@@ -445,7 +445,7 @@
             rt: document.querySelector('.meta__rotten'),
             tmdb: document.querySelector('.meta__tmdb'),
             lb: document.querySelector('.meta__letterboxd'),
-            br: document.querySelector('.meta__bluray') || document.querySelector('a[href*="blu-ray.com"]')?.closest('li')
+            br: document.querySelector('.meta__blu-ray') || document.querySelector('a[href*="blu-ray.com"]')?.closest('li')
         };
 
         if (Elements.lb) {

@@ -54,9 +54,30 @@
             this.init();
         }
 
+        // UNIT3D v8+ renders the Seeders/Leechers/Completed column headers as icons
+        // only (no visible text). Resolve the column identity from the visible text,
+        // the `title` attribute, or the header class (`torrent-search--list__*-header`).
+        headerName(th) {
+            const text = (th.textContent || '').trim();
+            if (text) return text;
+            if (th.getAttribute('title')) return th.getAttribute('title').trim();
+            const cls = Array.from(th.classList).find(c => c.startsWith('torrent-search--list__') && c.endsWith('-header'));
+            if (cls) {
+                const word = cls.replace('torrent-search--list__', '').replace('-header', '');
+                if (word === 'seeders') return 'Seeders';
+                if (word === 'leechers') return 'Leechers';
+                if (word === 'completed') return 'Completed';
+                if (word === 'name') return 'Name';
+                if (word === 'size') return 'Size';
+                if (word === 'age') return 'Age';
+                return word;
+            }
+            return text;
+        }
+
         init() {
             this.headers.forEach((th, i) => {
-                const name = th.textContent.trim();
+                const name = this.headerName(th);
                 const spec = this.config.find(c => name.includes(c.name));
                 if (spec) {
                     th.style.cursor = 'pointer';
@@ -67,7 +88,7 @@
             });
 
             if (this.prefs && this.prefs.index >= 0 && this.prefs.index < this.headers.length) {
-                const spec = this.config.find(c => this.headers[this.prefs.index].textContent.trim().includes(c.name));
+                const spec = this.config.find(c => this.headerName(this.headers[this.prefs.index]).includes(c.name));
                 if (spec) {
                     this.sort(this.prefs.index, spec, false, this.prefs.desc);
                 }
@@ -110,7 +131,7 @@
 
         compareRows(a, b, sort) {
             if (sort.index < 0) return 0;
-            const spec = this.config.find(c => this.headers[sort.index].textContent.trim().includes(c.name));
+            const spec = this.config.find(c => this.headerName(this.headers[sort.index]).includes(c.name));
             if (!spec) return 0;
 
             const cellA = a.children[sort.index];
@@ -288,10 +309,8 @@
     }
 
     const SORTABLE_TABLES = [
-        '.similar-torrents__torrents',
-        '.table-torrents',
-        '.torrents__torrents',
-        'table.data-table'
+        'table.data-table',
+        '.similar-torrents__torrents'
     ].join(', ');
 
     let savedPrefs = null;
@@ -338,5 +357,4 @@
     } else {
         setupUI();
     }
-    window.addEventListener('turbolinks:load', setupUI);
 })();

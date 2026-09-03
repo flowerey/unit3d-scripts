@@ -477,5 +477,4 @@
     } else {
         start();
     }
-    window.addEventListener('turbolinks:load', start);
 })();

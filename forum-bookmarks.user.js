@@ -51,27 +51,38 @@
 
     function getPostInfo() {
         const url = window.location.href;
-        const pathMatch = url.match(/\/(?:forums|forum)\/[^/]+\/(?:posts?\/)?(\d+)/) || url.match(/[?&]post=(\d+)/);
-        if (!pathMatch) return null;
 
-        const postId = pathMatch[1];
-        const titleEl = document.querySelector('.topic-title, h2.post-title, h1');
+        // UNIT3D permalink route: /forums/topics/{topicId}/posts/{postId}
+        const permalink = url.match(/\/forums\/topics\/\d+\/posts\/(\d+)/);
+        const query = url.match(/[?&]post=(\d+)/);
+        const postId = permalink ? permalink[1] : (query ? query[1] : null);
+
+        // Legacy path fallback: /forums|/forum/{category}/{slug}/{postId}
+        let legacyId = null;
+        if (!postId) {
+            const legacy = url.match(/\/(?:forums|forum)\/[^/]+\/[^/]+\/(\d+)/);
+            if (legacy) legacyId = legacy[1];
+        }
+        const id = postId || legacyId;
+        if (!id) return null;
+
+        const titleEl = document.querySelector('h2.panel__heading, .topic-title, h2.post-title, h1');
         const title = titleEl ? titleEl.textContent.trim().substring(0, 200) : document.title;
 
-        const topicEl = document.querySelector('.topic-title a, .forum-topic__title a');
+        const topicEl = document.querySelector('.topic-title a, .forum-topic__title a, h2.panel__heading');
         const topicTitle = topicEl ? topicEl.textContent.trim() : '';
-        const topicUrl = topicEl ? topicEl.href : '';
+        const topicUrl = topicEl && topicEl.href ? topicEl.href : '';
 
-        const categoryEl = document.querySelector('.forum-category, .breadcrumb a:last-child');
+        const categoryEl = document.querySelector('.forum-category, .breadcrumb--active, .breadcrumb a:last-child');
         const category = categoryEl ? categoryEl.textContent.trim() : '';
 
-        return { id: postId, url: url.split('?')[0], title, topicTitle, topicUrl, category };
+        return { id, url: url.split('?')[0], title, topicTitle, topicUrl, category };
     }
 
     function injectBookmarkButton(postInfo) {
         if (!postInfo || document.querySelector('.u3d-fb-btn')) return;
 
-        const actions = document.querySelector('.post__actions, .topic__actions, .panel__actions');
+        const actions = document.querySelector('.post__toolbar, .post__actions, .topic__actions, .panel__actions');
         if (!actions) return;
 
         const btn = document.createElement('button');
@@ -98,7 +109,19 @@
             }
             updateBtn();
         });
-        actions.appendChild(btn);
+        // UNIT3D forum posts render their action buttons inside a <menu class="post__toolbar">
+        // whose children are <li class="post__toolbar-item">. Wrap the button in an <li> when
+        // injecting there so it nests correctly (and align it with the existing items).
+        if (actions.classList && actions.classList.contains('post__toolbar')) {
+            btn.style.cssText += 'margin-left:4px;';
+            const item = document.createElement('li');
+            item.className = 'post__toolbar-item';
+            item.style.cssText = 'display:inline-flex;align-items:center;margin:0 4px;';
+            item.appendChild(btn);
+            actions.appendChild(item);
+        } else {
+            actions.appendChild(btn);
+        }
     }
 
     function createPanel() {
@@ -247,5 +270,4 @@
     }
 
     init();
-    window.addEventListener('turbolinks:load', init);
 })();

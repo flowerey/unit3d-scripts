@@ -15,17 +15,17 @@
 (function () {
     'use strict';
 
-    const STAT_NAMES = ['upload', 'download', 'ratio', 'buffer', 'warnings', 'bon', 'tokens'];
-
-    const BADGE_SELECTORS = {
-        upload: 0,
-        download: 1,
-        ratio: 2,
-        buffer: 3,
-        warnings: 4,
-        bon: 5,
-        tokens: 6
-    };
+    // UNT3D v8+ moved the navbar stats from the old `.badge-user` badges into the
+    // `.top-nav__ratio-bar` list, each stat in its own `.ratio-bar__*` element.
+    // There is no longer a "warnings" stat element in the navbar.
+    const STAT_CONFIG = [
+        { name: 'upload', selector: '.ratio-bar__uploaded' },
+        { name: 'download', selector: '.ratio-bar__downloaded' },
+        { name: 'buffer', selector: '.ratio-bar__buffer' },
+        { name: 'bon', selector: '.ratio-bar__points' },
+        { name: 'ratio', selector: '.ratio-bar__ratio' },
+        { name: 'tokens', selector: '.ratio-bar__tokens' }
+    ];
 
     const TRANSFER_UNITS = ['upload', 'download', 'buffer'];
 
@@ -118,21 +118,20 @@
     }
 
     function statsChange() {
-        const badges = document.querySelectorAll('.badge-user');
-        if (badges.length < 7) return;
+        const stats = STAT_CONFIG
+            .map(s => ({ name: s.name, el: document.querySelector(s.selector) }))
+            .filter(s => s.el);
+        if (stats.length < 2) return;
 
         const history = loadHistory();
         const now = Date.now();
         const lastTs = Object.keys(history).sort((a, b) => b - a)[0];
         const snapshot = {};
 
-        STAT_NAMES.forEach((name, i) => {
+        stats.forEach(({ name, el }) => {
             try {
-                const badge = badges[i];
-                if (!badge) return;
-
                 const storedValue = localStorage.getItem(name);
-                const currentValue = badge.textContent;
+                const currentValue = el.textContent;
                 const numValue = parseStatValue(currentValue, name);
 
                 snapshot[name] = numValue;
@@ -141,11 +140,11 @@
                     const prevValue = parseFloat(storedValue);
                     const change = numValue - prevValue;
 
-                    if (change !== 0) {
+                    if (change !== 0 && !Number.isNaN(change)) {
                         const span = document.createElement('span');
                         span.textContent = ` ${formatChange(change, name)}`;
                         span.style.color = getChangeColor(change, name);
-                        badge.appendChild(span);
+                        el.appendChild(span);
                     }
                 }
 
@@ -162,10 +161,9 @@
 
         const timestamps = Object.keys(history).sort((a, b) => a - b).slice(-30);
         if (timestamps.length >= 2) {
-            STAT_NAMES.forEach((name, i) => {
+            stats.forEach(({ name, el }) => {
                 if (!TRANSFER_UNITS.includes(name)) return;
-                const badge = badges[i];
-                if (!badge || badge.querySelector('svg')) return;
+                if (!el || el.querySelector('svg')) return;
 
                 const chartData = timestamps.map(ts => ({
                     timestamp: parseInt(ts),
@@ -179,7 +177,7 @@
                     container.style.cssText = 'margin-left:6px;vertical-align:middle;cursor:help;';
                     const last5 = chartData.slice(-5);
                     container.title = `Trend (last ${chartData.length} snapshots)\n${last5.map(d => `${new Date(d.timestamp).toLocaleDateString()}: ${d.value.toFixed(2)} GiB`).join('\n')}`;
-                    badge.appendChild(container);
+                    el.appendChild(container);
                 }
             });
         }
@@ -187,10 +185,10 @@
 
     function randomTorrent() {
         try {
-            const buttons = document.querySelector('.button-left');
+            const buttons = document.querySelector('.torrent-search__results .panel__actions, .panel__header .panel__actions');
             if (!buttons) return;
 
-            const table = document.querySelector('#facetedSearch table, .table-torrents');
+            const table = document.querySelector('table.data-table');
             if (!table) return;
 
             const rows = table.querySelectorAll('tr:not(.success)');
@@ -208,11 +206,17 @@
             const randomId = Math.floor(Math.random() * (latestId - 1)) + 1;
             const baseUrl = window.location.origin;
 
+            const randomAction = document.createElement('div');
+            randomAction.className = 'panel__action';
+
             const randomButton = document.createElement('a');
             randomButton.href = `${baseUrl}/torrents/${randomId}`;
             randomButton.textContent = '? Random Torrent';
-            randomButton.className = 'btn btn-sm btn-warning';
-            buttons.appendChild(randomButton);
+            randomButton.className = 'form__button form__button--text';
+            randomButton.title = 'Open a random torrent';
+
+            randomAction.appendChild(randomButton);
+            buttons.appendChild(randomAction);
         } catch (e) {
             // Silently fail
         }
@@ -257,7 +261,7 @@
         constructor() {
             this.stylesInjected = false;
             this.activeFilter = null;
-            this.tableSelector = '#facetedSearch table, .table-torrents, .torrents__torrents';
+            this.tableSelector = 'table.data-table, .torrents__torrents, .table-torrents';
         }
 
         injectStyles() {
@@ -376,12 +380,10 @@
         if (localStorage.getItem('u3d_avatar_cache_bust') !== 'true') return;
 
         const selectors = [
-            '.torrent-info__uploader img',
-            '.user-profile__avatar img',
-            '.torrent-search--list__uploader img',
+            'img[src*="/authenticated-images/user-avatars/"]',
             'img[src*="/avatars/"]',
-            'img[src*="/img/avatars/"]',
-            'img.user-avatar'
+            '.chatbox-message__avatar',
+            '.torrent-search--list__uploader img'
         ];
         const seen = new Set();
         for (const sel of selectors) {
@@ -407,5 +409,4 @@
     };
 
     runAll();
-    window.addEventListener('turbolinks:load', runAll);
 })();
